@@ -97,9 +97,15 @@ export default function CreateChannel() {
   });
 
   // Keep the form submission handler separate to debug the flow
-  const onSubmit = (data: InsertChannel) => {
-    console.log('Form submission handler called with data:', data);
-    createChannelMutation.mutate(data);
+  const onSubmit = async (data: InsertChannel) => {
+    console.log('Form submitted with data:', data);
+    console.log('Current user:', user); // Assumes 'user' is available in scope
+    const channelData = {
+      ...data,
+      userId: user?.id // Add userId from user object
+    };
+    console.log('Modified channel data:', channelData);
+    createChannelMutation.mutate(channelData);
   };
 
   // Log when the submit button is clicked

@@ -12,11 +12,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
       console.log('Received channel data:', req.body);
-      const channelData = insertChannelSchema.parse(req.body);
-      const channel = await storage.createChannel({
-        ...channelData,
-        userId: req.user.id,
+      const channelData = insertChannelSchema.parse({
+        ...req.body,
+        userId: req.user.id,  // Make sure we're using the authenticated user's ID
       });
+      const channel = await storage.createChannel(channelData);
       console.log('Created channel:', channel);
       res.json(channel);
     } catch (error) {
