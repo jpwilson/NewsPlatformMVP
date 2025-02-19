@@ -1,0 +1,54 @@
+Prompt for AI Agent: Build NewsPlatform MVP
+Overview:
+
+Develop NewsPlatform, a news web application that enables users to sign up, publish articles, manage channels, and engage with content through likes, dislikes, comments, and subscriptions. The goal is to create a fully functional minimum viable product (MVP) with a modern, mobile-friendly design, built using React, TypeScript, Next.js, and Supabase.
+
+Key Features:
+
+Authentication:
+Implement OAuth login with Twitter (X), Google, and Facebook.
+Include manual sign-up/login with username and password.
+Channel Management:
+Automatically create a channel for a user when they publish their first article (user can name it).
+Allow users to manage up to 10 channels.
+Article Management:
+Enable users to publish, edit, archive (unpublish), or delete articles.
+Articles are tied to a single channel and include title, content, and metadata (location, category).
+User Interactions:
+Allow users to like (upvote), dislike (downvote), and comment on articles (flat or threaded comments).
+Subscriptions:
+Users can subscribe to channels to receive updates on new articles.
+Search Functionality:
+Provide search by location (country, city, region) and category (e.g., politics, sports, entertainment).
+Notetaking:
+Basic tools for authors (e.g., brainstorming, references) and readers (e.g., private notes on articles/channels).
+Technical Requirements:
+
+Tech Stack:
+Use React with TypeScript for the frontend.
+Use Next.js for server-side rendering and API routes.
+Use Supabase for authentication, database, and storage.
+Database Schema:
+Design tables for users, channels, articles, likes, dislikes, comments, subscriptions, and notes.
+Ensure relationships: articles belong to channels, channels belong to users.
+Performance:
+Optimize for fast loading and smooth interactions, laying a foundation for future scalability.
+Design & User Experience:
+
+Create a responsive, mobile-friendly design that works seamlessly on both desktop and mobile devices.
+Use a clean, modern aesthetic with intuitive navigation and a polished look.
+Prioritize ease of use: streamlined onboarding, simple content creation, and easy browsing/subscribing.
+Additional Notes:
+
+Focus on core functionality: rapid content creation, channel-based publishing, and user engagement.
+Avoid implementing monetization features (e.g., ads, premium tiers) in the MVP, but ensure the structure supports future additions.
+Aim for a joyful user experience, especially on smartphones, with fast performance and clear visuals.
+Goal:
+
+Build a high-quality MVP that showcases NewsPlatform’s value: effortless publishing, engaging interactions, and a delightful mobile-optimized experience. The app should be ready for testing and set the stage for future growth.
+
+Notes for You
+I’ve excluded monetization details (e.g., revenue sharing, ads) as requested, keeping the focus on the MVP’s core features.
+The prompt emphasizes styling and mobile optimization (“looks good and mobile-friendly”) per your request, without prescribing a specific design style—leaving room for the AI to interpret “modern and clean.”
+If you have questions or want to tweak anything (e.g., add more detail on search or notetaking), let me know!
+This prompt should give the AI agent everything it needs to build a detailed, functional, and impressive MVP for NewsPlatform. Ready to proceed?
