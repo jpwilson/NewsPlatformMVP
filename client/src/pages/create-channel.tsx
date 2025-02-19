@@ -44,10 +44,14 @@ export default function CreateChannel() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
 
-  console.log('Component rendered with user:', user);
-
+  // Form setup with required fields
   const form = useForm<InsertChannel>({
-    resolver: zodResolver(insertChannelSchema),
+    resolver: zodResolver(
+      insertChannelSchema.extend({
+        name: insertChannelSchema.shape.name,
+        description: insertChannelSchema.shape.description,
+      })
+    ),
     defaultValues: {
       name: "",
       description: "",
@@ -58,38 +62,42 @@ export default function CreateChannel() {
     },
   });
 
-  console.log('Form validation errors:', form.formState.errors);
+  // Explicitly handle the submit button click
+  const handleButtonClick = (event: React.MouseEvent) => {
+    console.log("Create Channel button clicked");
+    // Don't prevent default - let the form handle submission
+  };
 
-  const handleSubmit = async (data: InsertChannel) => {
-    console.log('Form submitted with data:', data);
+  // Handle form submission
+  const onSubmit = async (data: InsertChannel) => {
+    console.log("Form submission handler called with data:", data);
     try {
-      await createChannelMutation.mutate(data);
+      const channelData = {
+        ...data,
+        userId: user?.id
+      };
+      console.log("Submitting channel data:", channelData);
+      await createChannelMutation.mutate(channelData);
     } catch (error) {
-      console.error('Form submission error:', error);
+      console.error("Form submission error:", error);
     }
   };
 
   const createChannelMutation = useMutation({
     mutationFn: async (data: InsertChannel) => {
-      console.log('Mutation starting with data:', data);
-
-      const response = await apiRequest("POST", "/api/channels", {
-        ...data,
-        userId: user?.id
-      });
-
-      console.log('API response:', response);
+      console.log("Mutation starting with data:", data);
+      const response = await apiRequest("POST", "/api/channels", data);
 
       if (!response.ok) {
         const error = await response.json();
-        console.error('API error:', error);
+        console.error("API error:", error);
         throw new Error(error.message || "Failed to create channel");
       }
 
       return await response.json();
     },
     onSuccess: (channel) => {
-      console.log('Channel created successfully:', channel);
+      console.log("Channel created successfully:", channel);
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       toast({
         title: "Channel created",
@@ -98,7 +106,7 @@ export default function CreateChannel() {
       setLocation("/articles/new");
     },
     onError: (error: Error) => {
-      console.error('Mutation error:', error);
+      console.error("Mutation error:", error);
       toast({
         title: "Failed to create channel",
         description: error.message,
@@ -126,9 +134,17 @@ export default function CreateChannel() {
         <Form {...form}>
           <form
             onSubmit={(e) => {
-              console.log('Form onSubmit event triggered');
+              console.log("Form submit event triggered");
               e.preventDefault();
-              form.handleSubmit(handleSubmit)(e);
+              const isValid = form.formState.isValid;
+              console.log("Form validation state:", isValid);
+              console.log("Form validation errors:", form.formState.errors);
+
+              if (isValid) {
+                form.handleSubmit(onSubmit)(e);
+              } else {
+                console.log("Form validation failed");
+              }
             }}
             className="space-y-6"
           >
@@ -277,6 +293,7 @@ export default function CreateChannel() {
               <Button
                 type="submit"
                 disabled={createChannelMutation.isPending}
+                onClick={handleButtonClick}
               >
                 {createChannelMutation.isPending ? (
                   <>
