@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { NavigationBar } from "@/components/navigation-bar";
 import { Loader2 } from "lucide-react";
+import React from 'react';
 
 const CHANNEL_CATEGORIES = [
   "News",
@@ -42,6 +43,8 @@ export default function CreateChannel() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
+  console.log('CreateChannel component rendered'); // Component mounting check
+
   const form = useForm<InsertChannel>({
     resolver: zodResolver(insertChannelSchema),
     defaultValues: {
@@ -50,11 +53,19 @@ export default function CreateChannel() {
       category: undefined,
       location: "",
     },
+    onChange: (data) => {
+      console.log('Form data changed:', data); // Monitor form data changes
+    },
   });
+
+  // Log validation errors whenever they change
+  React.useEffect(() => {
+    console.log('Form validation errors:', form.formState.errors);
+  }, [form.formState.errors]);
 
   const createChannelMutation = useMutation({
     mutationFn: async (data: InsertChannel) => {
-      console.log('Form data being submitted:', data);
+      console.log('Mutation started with data:', data); // Verify mutation trigger
       try {
         const res = await apiRequest("POST", "/api/channels", data);
         const json = await res.json();
@@ -62,12 +73,12 @@ export default function CreateChannel() {
         if (!res.ok) throw new Error(json.message || "Failed to create channel");
         return json;
       } catch (error) {
-        console.error('Error during channel creation:', error);
+        console.error('Mutation error:', error);
         throw error;
       }
     },
     onSuccess: (channel) => {
-      console.log('Channel created successfully:', channel);
+      console.log('Mutation succeeded:', channel);
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       toast({
         title: "Channel created",
@@ -76,7 +87,7 @@ export default function CreateChannel() {
       setLocation("/articles/new");
     },
     onError: (error: Error) => {
-      console.error('Channel creation error:', error);
+      console.error('Mutation error handler:', error);
       toast({
         title: "Failed to create channel",
         description: error.message,
@@ -84,6 +95,23 @@ export default function CreateChannel() {
       });
     },
   });
+
+  // Keep the form submission handler separate to debug the flow
+  const onSubmit = (data: InsertChannel) => {
+    console.log('Form submission handler called with data:', data);
+    createChannelMutation.mutate(data);
+  };
+
+  // Log when the submit button is clicked
+  const handleSubmitClick = () => {
+    console.log('Submit button clicked');
+    console.log('Current form state:', {
+      isDirty: form.formState.isDirty,
+      isValid: form.formState.isValid,
+      isSubmitting: form.formState.isSubmitting,
+      errors: form.formState.errors
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -98,11 +126,13 @@ export default function CreateChannel() {
         </div>
 
         <Form {...form}>
-          <form 
-            onSubmit={form.handleSubmit((data) => createChannelMutation.mutate(data))}
+          <form
+            onSubmit={(e) => {
+              console.log('Raw form submission event:', e);
+              form.handleSubmit(onSubmit)(e);
+            }}
             className="space-y-6"
           >
-            {/* Required Fields */}
             <div className="space-y-4">
               <FormField
                 control={form.control}
@@ -141,7 +171,6 @@ export default function CreateChannel() {
               />
             </div>
 
-            {/* Optional Fields in Accordion */}
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem value="appearance">
                 <AccordionTrigger>Channel Appearance</AccordionTrigger>
@@ -255,6 +284,7 @@ export default function CreateChannel() {
               <Button
                 type="submit"
                 disabled={createChannelMutation.isPending}
+                onClick={handleSubmitClick}
               >
                 {createChannelMutation.isPending ? (
                   <>
