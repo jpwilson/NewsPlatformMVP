@@ -52,6 +52,7 @@ export default function CreateChannel() {
 
   const createChannelMutation = useMutation({
     mutationFn: async (data: InsertChannel) => {
+      console.log('Submitting channel data:', data);
       const res = await apiRequest("POST", "/api/channels", data);
       const json = await res.json();
       if (!res.ok) throw new Error(json.message || "Failed to create channel");
@@ -66,6 +67,7 @@ export default function CreateChannel() {
       setLocation("/articles/new");
     },
     onError: (error: Error) => {
+      console.error('Channel creation error:', error);
       toast({
         title: "Failed to create channel",
         description: error.message,

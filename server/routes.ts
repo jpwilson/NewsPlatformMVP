@@ -10,12 +10,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Channels
   app.post("/api/channels", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const channelData = insertChannelSchema.parse(req.body);
-    const channel = await storage.createChannel({
-      ...channelData,
-      userId: req.user.id,
-    });
-    res.json(channel);
+    try {
+      console.log('Received channel data:', req.body);
+      const channelData = insertChannelSchema.parse(req.body);
+      const channel = await storage.createChannel({
+        ...channelData,
+        userId: req.user.id,
+      });
+      console.log('Created channel:', channel);
+      res.json(channel);
+    } catch (error) {
+      console.error('Channel creation error:', error);
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create channel' });
+    }
   });
 
   app.get("/api/channels", async (req, res) => {
