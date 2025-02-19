@@ -119,7 +119,8 @@ export default function CreateChannel() {
                       <Textarea
                         placeholder="Tell readers what your channel is about..."
                         className="resize-none"
-                        {...field}
+                        value={field.value || ""}
+                        onChange={field.onChange}
                       />
                     </FormControl>
                     <FormDescription>
@@ -194,7 +195,7 @@ export default function CreateChannel() {
                         <FormLabel>Category</FormLabel>
                         <Select
                           onValueChange={field.onChange}
-                          defaultValue={field.value}
+                          value={field.value || undefined}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -223,7 +224,11 @@ export default function CreateChannel() {
                       <FormItem>
                         <FormLabel>Location (Optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="e.g., New York, USA" {...field} />
+                          <Input 
+                            placeholder="e.g., New York, USA" 
+                            value={field.value || ""}
+                            onChange={field.onChange}
+                          />
                         </FormControl>
                       </FormItem>
                     )}

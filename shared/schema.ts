@@ -11,7 +11,7 @@ export const users = pgTable("users", {
 export const channels = pgTable("channels", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  description: text("description"),
+  description: text("description").notNull(),
   userId: integer("user_id").notNull(),
   category: text("category"),
   location: text("location"),
@@ -63,6 +63,8 @@ export const notes = pgTable("notes", {
 
 export const insertUserSchema = createInsertSchema(users);
 export const insertChannelSchema = createInsertSchema(channels).extend({
+  name: z.string().min(1, "Channel name is required"),
+  description: z.string().min(1, "Description is required"),
   category: z.string().optional(),
   location: z.string().optional(),
   bannerImage: z.string().optional(),
