@@ -9,7 +9,8 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { Loader2 } from "lucide-react"; // Fixed import
+import { Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth"; // Add this import
 
 const CATEGORIES = [
   "Politics",
@@ -25,6 +26,7 @@ const CATEGORIES = [
 export function ArticleEditor({ channels }: { channels: Channel[] }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const { user } = useAuth(); // Get the user context
 
   const form = useForm<InsertArticle>({
     defaultValues: {
@@ -37,16 +39,26 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
     },
   });
 
-  // Explicit button click handler for debugging
-  const handleClick = () => {
-    console.log("Publish button clicked!");
-    console.log("Current form values:", form.getValues());
-  };
-
   // Handle form submission
   const onSubmit = async (data: InsertArticle) => {
     console.log("Form submitted with data:", data);
-    await createArticleMutation.mutate(data);
+    if (!user) {
+      console.error("No user found");
+      toast({
+        title: "Error",
+        description: "You must be logged in to create an article",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Add userId to the article data
+    const articleData = {
+      ...data,
+      userId: user.id,
+    };
+    console.log("Submitting article with data:", articleData);
+    await createArticleMutation.mutate(articleData);
   };
 
   const createArticleMutation = useMutation({
@@ -193,7 +205,6 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
           type="submit"
           className="w-full"
           disabled={createArticleMutation.isPending}
-          onClick={handleClick}
         >
           {createArticleMutation.isPending ? (
             <>

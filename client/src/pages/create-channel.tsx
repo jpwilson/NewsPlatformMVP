@@ -25,19 +25,24 @@ export default function CreateChannel() {
     },
   });
 
-  // Explicit button click handler
-  const handleClick = () => {
-    console.log("Button clicked!");
-    console.log("Current form values:", form.getValues());
-  };
-
   // Simple form submission
   const onSubmit = async (data: InsertChannel) => {
     console.log("Form submitted with data:", data);
+    if (!user) {
+      console.error("No user found");
+      toast({
+        title: "Error",
+        description: "You must be logged in to create a channel",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const channelData = {
       ...data,
-      userId: user?.id
+      userId: user.id
     };
+    console.log("Submitting channel with data:", channelData);
     await createChannelMutation.mutate(channelData);
   };
 
@@ -59,8 +64,12 @@ export default function CreateChannel() {
         title: "Channel created!",
         description: "Your channel has been created successfully.",
       });
-      console.log("Redirecting to create article page");
-      setLocation("/articles/new");
+      console.log("Attempting to redirect to /articles/new");
+      // Force a slight delay to ensure toast is visible
+      setTimeout(() => {
+        console.log("Executing redirect");
+        setLocation("/articles/new");
+      }, 500);
     },
     onError: (error: Error) => {
       console.error("Creation failed:", error);
@@ -72,7 +81,6 @@ export default function CreateChannel() {
     },
   });
 
-  // Simplified render with just the basic form
   return (
     <div className="min-h-screen bg-background">
       <NavigationBar />
@@ -117,10 +125,17 @@ export default function CreateChannel() {
 
             <Button 
               type="submit"
-              onClick={handleClick}
               className="w-full"
+              disabled={createChannelMutation.isPending}
             >
-              Create Channel
+              {createChannelMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Channel"
+              )}
             </Button>
           </form>
         </Form>
