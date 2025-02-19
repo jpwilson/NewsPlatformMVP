@@ -1,5 +1,4 @@
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { insertArticleSchema, type InsertArticle, Channel } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { Loader2 } from "lucide-react"; // Fixed import
 
 const CATEGORIES = [
   "Politics",
@@ -25,9 +25,8 @@ const CATEGORIES = [
 export function ArticleEditor({ channels }: { channels: Channel[] }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  
+
   const form = useForm<InsertArticle>({
-    resolver: zodResolver(insertArticleSchema),
     defaultValues: {
       title: "",
       content: "",
@@ -38,20 +37,41 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
     },
   });
 
+  // Explicit button click handler for debugging
+  const handleClick = () => {
+    console.log("Publish button clicked!");
+    console.log("Current form values:", form.getValues());
+  };
+
+  // Handle form submission
+  const onSubmit = async (data: InsertArticle) => {
+    console.log("Form submitted with data:", data);
+    await createArticleMutation.mutate(data);
+  };
+
   const createArticleMutation = useMutation({
     mutationFn: async (data: InsertArticle) => {
+      console.log("Making API request with data:", data);
       const res = await apiRequest("POST", "/api/articles", data);
+      if (!res.ok) {
+        const error = await res.json();
+        console.error("API error:", error);
+        throw new Error(error.message || "Failed to create article");
+      }
       return await res.json();
     },
     onSuccess: (article) => {
+      console.log("Article created successfully:", article);
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       toast({
         title: "Article created",
         description: "Your article has been published successfully.",
       });
+      console.log("Redirecting to article page:", `/articles/${article.id}`);
       setLocation(`/articles/${article.id}`);
     },
     onError: (error: Error) => {
+      console.error("Creation failed:", error);
       toast({
         title: "Failed to create article",
         description: error.message,
@@ -63,7 +83,11 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit((data) => createArticleMutation.mutate(data))}
+        onSubmit={(e) => {
+          e.preventDefault();
+          console.log("Form submitted!");
+          form.handleSubmit(onSubmit)(e);
+        }}
         className="space-y-6"
       >
         <FormField
@@ -169,8 +193,16 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
           type="submit"
           className="w-full"
           disabled={createArticleMutation.isPending}
+          onClick={handleClick}
         >
-          Publish Article
+          {createArticleMutation.isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Publishing...
+            </>
+          ) : (
+            "Publish Article"
+          )}
         </Button>
       </form>
     </Form>

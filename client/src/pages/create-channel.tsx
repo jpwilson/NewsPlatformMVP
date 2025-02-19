@@ -59,6 +59,7 @@ export default function CreateChannel() {
         title: "Channel created!",
         description: "Your channel has been created successfully.",
       });
+      console.log("Redirecting to create article page");
       setLocation("/articles/new");
     },
     onError: (error: Error) => {
