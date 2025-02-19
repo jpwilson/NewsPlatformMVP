@@ -44,6 +44,8 @@ export default function CreateChannel() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
 
+  console.log('Component rendered with user:', user);
+
   const form = useForm<InsertChannel>({
     resolver: zodResolver(insertChannelSchema),
     defaultValues: {
@@ -51,23 +53,43 @@ export default function CreateChannel() {
       description: "",
       category: undefined,
       location: "",
+      bannerImage: undefined,
+      profileImage: undefined,
     },
   });
 
+  console.log('Form validation errors:', form.formState.errors);
+
+  const handleSubmit = async (data: InsertChannel) => {
+    console.log('Form submitted with data:', data);
+    try {
+      await createChannelMutation.mutate(data);
+    } catch (error) {
+      console.error('Form submission error:', error);
+    }
+  };
+
   const createChannelMutation = useMutation({
     mutationFn: async (data: InsertChannel) => {
-      console.log('Submitting channel data:', { ...data, userId: user?.id });
-      const res = await apiRequest("POST", "/api/channels", {
+      console.log('Mutation starting with data:', data);
+
+      const response = await apiRequest("POST", "/api/channels", {
         ...data,
         userId: user?.id
       });
-      if (!res.ok) {
-        const error = await res.json();
+
+      console.log('API response:', response);
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('API error:', error);
         throw new Error(error.message || "Failed to create channel");
       }
-      return await res.json();
+
+      return await response.json();
     },
     onSuccess: (channel) => {
+      console.log('Channel created successfully:', channel);
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       toast({
         title: "Channel created",
@@ -76,6 +98,7 @@ export default function CreateChannel() {
       setLocation("/articles/new");
     },
     onError: (error: Error) => {
+      console.error('Mutation error:', error);
       toast({
         title: "Failed to create channel",
         description: error.message,
@@ -102,7 +125,11 @@ export default function CreateChannel() {
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit((data) => createChannelMutation.mutate(data))}
+            onSubmit={(e) => {
+              console.log('Form onSubmit event triggered');
+              e.preventDefault();
+              form.handleSubmit(handleSubmit)(e);
+            }}
             className="space-y-6"
           >
             <div className="space-y-4">
@@ -144,6 +171,51 @@ export default function CreateChannel() {
             </div>
 
             <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="appearance">
+                <AccordionTrigger>Channel Appearance</AccordionTrigger>
+                <AccordionContent className="space-y-4 pt-4">
+                  <FormField
+                    control={form.control}
+                    name="bannerImage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Banner Image (Optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="text"
+                            placeholder="Enter banner image URL"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Provide a URL for your banner image (1500x500 pixels recommended)
+                        </FormDescription>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="profileImage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Profile Image (Optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="text"
+                            placeholder="Enter profile image URL"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Provide a URL for your profile image (square, 400x400 pixels minimum)
+                        </FormDescription>
+                      </FormItem>
+                    )}
+                  />
+                </AccordionContent>
+              </AccordionItem>
+
               <AccordionItem value="details">
                 <AccordionTrigger>Additional Details</AccordionTrigger>
                 <AccordionContent className="space-y-4 pt-4">
