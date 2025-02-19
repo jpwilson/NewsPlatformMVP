@@ -13,6 +13,10 @@ export const channels = pgTable("channels", {
   name: text("name").notNull(),
   description: text("description"),
   userId: integer("user_id").notNull(),
+  category: text("category"),
+  location: text("location"),
+  bannerImage: text("banner_image"),
+  profileImage: text("profile_image"),
 });
 
 export const articles = pgTable("articles", {
@@ -57,9 +61,13 @@ export const notes = pgTable("notes", {
   channelId: integer("channel_id"),
 });
 
-// Insert schemas
 export const insertUserSchema = createInsertSchema(users);
-export const insertChannelSchema = createInsertSchema(channels);
+export const insertChannelSchema = createInsertSchema(channels).extend({
+  category: z.string().optional(),
+  location: z.string().optional(),
+  bannerImage: z.string().optional(),
+  profileImage: z.string().optional(),
+});
 export const insertArticleSchema = createInsertSchema(articles).omit({ 
   createdAt: true 
 });
@@ -70,7 +78,6 @@ export const insertReactionSchema = createInsertSchema(reactions);
 export const insertSubscriptionSchema = createInsertSchema(subscriptions);
 export const insertNoteSchema = createInsertSchema(notes);
 
-// Types
 export type User = typeof users.$inferSelect;
 export type Channel = typeof channels.$inferSelect;
 export type Article = typeof articles.$inferSelect;
