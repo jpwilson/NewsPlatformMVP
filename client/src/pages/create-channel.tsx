@@ -5,11 +5,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormDescription } fr
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
-import { NavigationBar } from "@/components/navigation-bar";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+import { NavigationBar } from "@/components/navigation-bar";
 import { Loader2 } from "lucide-react";
 
 const CHANNEL_CATEGORIES = [
@@ -93,10 +99,7 @@ export default function CreateChannel() {
 
         <Form {...form}>
           <form 
-            onSubmit={form.handleSubmit((data) => {
-              console.log('Form submitted:', data);
-              createChannelMutation.mutate(data);
-            })}
+            onSubmit={form.handleSubmit((data) => createChannelMutation.mutate(data))}
             className="space-y-6"
           >
             {/* Required Fields */}
