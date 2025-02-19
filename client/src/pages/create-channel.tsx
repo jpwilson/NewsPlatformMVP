@@ -87,6 +87,7 @@ export default function CreateChannel() {
 
   const onSubmit = async (data: InsertChannel) => {
     console.log('Form submitted with data:', data);
+    console.log('Form validation errors:', form.formState.errors);
     createChannelMutation.mutate(data);
   };
 
@@ -104,7 +105,10 @@ export default function CreateChannel() {
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit(onSubmit)}
+            onSubmit={(e) => {
+              console.log('Form submission event triggered');
+              form.handleSubmit(onSubmit)(e);
+            }}
             className="space-y-6"
           >
             {/* Required Fields */}
@@ -135,8 +139,7 @@ export default function CreateChannel() {
                       <Textarea
                         placeholder="Tell readers what your channel is about..."
                         className="resize-none"
-                        value={field.value || ""}
-                        onChange={(e) => field.onChange(e.target.value)}
+                        {...field}
                       />
                     </FormControl>
                     <FormDescription>
@@ -265,6 +268,10 @@ export default function CreateChannel() {
               <Button
                 type="submit"
                 disabled={createChannelMutation.isPending}
+                onClick={() => {
+                  console.log('Submit button clicked');
+                  console.log('Current form values:', form.getValues());
+                }}
               >
                 {createChannelMutation.isPending ? (
                   <>
