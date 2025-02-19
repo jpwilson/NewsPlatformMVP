@@ -47,18 +47,27 @@ export default function CreateChannel() {
     defaultValues: {
       name: "",
       description: "",
+      category: undefined,
+      location: "",
     },
   });
 
   const createChannelMutation = useMutation({
     mutationFn: async (data: InsertChannel) => {
-      console.log('Submitting channel data:', data);
-      const res = await apiRequest("POST", "/api/channels", data);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message || "Failed to create channel");
-      return json;
+      console.log('Form data being submitted:', data);
+      try {
+        const res = await apiRequest("POST", "/api/channels", data);
+        const json = await res.json();
+        console.log('Server response:', json);
+        if (!res.ok) throw new Error(json.message || "Failed to create channel");
+        return json;
+      } catch (error) {
+        console.error('Error during channel creation:', error);
+        throw error;
+      }
     },
-    onSuccess: () => {
+    onSuccess: (channel) => {
+      console.log('Channel created successfully:', channel);
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       toast({
         title: "Channel created",
@@ -76,6 +85,11 @@ export default function CreateChannel() {
     },
   });
 
+  const onSubmit = async (data: InsertChannel) => {
+    console.log('Form submitted with data:', data);
+    createChannelMutation.mutate(data);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <NavigationBar />
@@ -90,7 +104,7 @@ export default function CreateChannel() {
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit((data) => createChannelMutation.mutate(data))}
+            onSubmit={form.handleSubmit(onSubmit)}
             className="space-y-6"
           >
             {/* Required Fields */}
@@ -122,7 +136,7 @@ export default function CreateChannel() {
                         placeholder="Tell readers what your channel is about..."
                         className="resize-none"
                         value={field.value || ""}
-                        onChange={field.onChange}
+                        onChange={(e) => field.onChange(e.target.value)}
                       />
                     </FormControl>
                     <FormDescription>
@@ -226,8 +240,8 @@ export default function CreateChannel() {
                       <FormItem>
                         <FormLabel>Location (Optional)</FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="e.g., New York, USA" 
+                          <Input
+                            placeholder="e.g., New York, USA"
                             value={field.value || ""}
                             onChange={field.onChange}
                           />
