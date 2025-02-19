@@ -13,9 +13,9 @@ import CreateArticle from "@/pages/create-article";
 function Router() {
   return (
     <Switch>
-      <ProtectedRoute path="/" component={HomePage} />
+      <Route path="/" component={HomePage} />
       <ProtectedRoute path="/articles/new" component={CreateArticle} />
-      <ProtectedRoute path="/articles/:id" component={ArticlePage} />
+      <Route path="/articles/:id" component={ArticlePage} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
