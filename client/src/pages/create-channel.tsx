@@ -4,7 +4,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useLocation } from "wouter";
+import { useLocation, Redirect } from "wouter";
 import { NavigationBar } from "@/components/navigation-bar";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -14,10 +14,9 @@ import { useMutation } from "@tanstack/react-query";
 
 export default function CreateChannel() {
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { user } = useAuth();
 
-  // Simplified form with just required fields
   const form = useForm<InsertChannel>({
     defaultValues: {
       name: "",
@@ -25,7 +24,6 @@ export default function CreateChannel() {
     },
   });
 
-  // Simple form submission
   const onSubmit = async (data: InsertChannel) => {
     console.log("Form submitted with data:", data);
     if (!user) {
@@ -64,12 +62,10 @@ export default function CreateChannel() {
         title: "Channel created!",
         description: "Your channel has been created successfully.",
       });
-      console.log("Attempting to redirect to /articles/new");
-      // Force a slight delay to ensure toast is visible
-      setTimeout(() => {
-        console.log("Executing redirect");
-        setLocation("/articles/new");
-      }, 500);
+      // Remove setTimeout and directly navigate
+      console.log("Current location:", location);
+      console.log("Navigating to /articles/new");
+      setLocation("/articles/new");
     },
     onError: (error: Error) => {
       console.error("Creation failed:", error);
@@ -80,6 +76,12 @@ export default function CreateChannel() {
       });
     },
   });
+
+  // Add redirect check
+  if (createChannelMutation.isSuccess) {
+    console.log("Mutation succeeded, redirecting");
+    return <Redirect to="/articles/new" />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
