@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import {
   DropdownMenu,
@@ -11,16 +11,18 @@ import { Newspaper, User, LogOut } from "lucide-react";
 
 export function NavigationBar({ hideAuthButtons = false }: { hideAuthButtons?: boolean }) {
   const { user, logoutMutation } = useAuth();
+  const [, setLocation] = useLocation();
 
   return (
     <header className="border-b">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/">
-          <div className="flex items-center gap-2 cursor-pointer">
-            <Newspaper className="h-6 w-6" />
-            <span className="font-bold text-lg">NewsPlatform</span>
-          </div>
-        </Link>
+        <button 
+          onClick={() => setLocation("/")}
+          className="flex items-center gap-2 cursor-pointer"
+        >
+          <Newspaper className="h-6 w-6" />
+          <span className="font-bold text-lg">NewsPlatform</span>
+        </button>
 
         <nav>
           {!hideAuthButtons && (
