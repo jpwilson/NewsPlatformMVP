@@ -9,12 +9,14 @@ import AuthPage from "@/pages/auth-page";
 import HomePage from "@/pages/home-page";
 import ArticlePage from "@/pages/article-page";
 import CreateArticle from "@/pages/create-article";
+import CreateChannel from "@/pages/create-channel";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={HomePage} />
       <ProtectedRoute path="/articles/new" component={CreateArticle} />
+      <ProtectedRoute path="/channels/new" component={CreateChannel} />
       <Route path="/articles/:id" component={ArticlePage} />
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
