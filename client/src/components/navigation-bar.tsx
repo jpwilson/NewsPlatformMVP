@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Newspaper, User, LogOut } from "lucide-react";
 
-export function NavigationBar() {
+export function NavigationBar({ hideAuthButtons = false }: { hideAuthButtons?: boolean }) {
   const { user, logoutMutation } = useAuth();
 
   return (
@@ -23,25 +23,27 @@ export function NavigationBar() {
         </Link>
 
         <nav>
-          {user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm">
-                  <User className="h-4 w-4 mr-2" />
-                  {user.username}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => logoutMutation.mutate()}>
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Link href="/auth">
-              <Button size="sm">Login</Button>
-            </Link>
+          {!hideAuthButtons && (
+            user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm">
+                    <User className="h-4 w-4 mr-2" />
+                    {user.username}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => logoutMutation.mutate()}>
+                    <LogOut className="h-4 w-4 mr-2" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Link href="/auth">
+                <Button size="sm">Login</Button>
+              </Link>
+            )
           )}
         </nav>
       </div>
