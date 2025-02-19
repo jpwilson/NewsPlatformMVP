@@ -11,12 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { NavigationBar } from "@/components/navigation-bar";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -85,12 +79,6 @@ export default function CreateChannel() {
     },
   });
 
-  const onSubmit = async (data: InsertChannel) => {
-    console.log('Form submitted with data:', data);
-    console.log('Form validation errors:', form.formState.errors);
-    createChannelMutation.mutate(data);
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <NavigationBar />
@@ -104,11 +92,11 @@ export default function CreateChannel() {
         </div>
 
         <Form {...form}>
-          <form
-            onSubmit={(e) => {
-              console.log('Form submission event triggered');
-              form.handleSubmit(onSubmit)(e);
-            }}
+          <form 
+            onSubmit={form.handleSubmit((data) => {
+              console.log('Form submitted:', data);
+              createChannelMutation.mutate(data);
+            })}
             className="space-y-6"
           >
             {/* Required Fields */}
@@ -211,10 +199,10 @@ export default function CreateChannel() {
                     name="category"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Category</FormLabel>
+                        <FormLabel>Category (Optional)</FormLabel>
                         <Select
                           onValueChange={field.onChange}
-                          value={field.value || undefined}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -229,9 +217,6 @@ export default function CreateChannel() {
                             ))}
                           </SelectContent>
                         </Select>
-                        <FormDescription>
-                          Help readers discover your content
-                        </FormDescription>
                       </FormItem>
                     )}
                   />
@@ -245,8 +230,7 @@ export default function CreateChannel() {
                         <FormControl>
                           <Input
                             placeholder="e.g., New York, USA"
-                            value={field.value || ""}
-                            onChange={field.onChange}
+                            {...field}
                           />
                         </FormControl>
                       </FormItem>
@@ -268,10 +252,6 @@ export default function CreateChannel() {
               <Button
                 type="submit"
                 disabled={createChannelMutation.isPending}
-                onClick={() => {
-                  console.log('Submit button clicked');
-                  console.log('Current form values:', form.getValues());
-                }}
               >
                 {createChannelMutation.isPending ? (
                   <>
