@@ -4,7 +4,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useLocation, Redirect } from "wouter";
+import { useLocation } from "wouter";
 import { NavigationBar } from "@/components/navigation-bar";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -14,7 +14,7 @@ import { useMutation } from "@tanstack/react-query";
 
 export default function CreateChannel() {
   const { toast } = useToast();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
 
   const form = useForm<InsertChannel>({
@@ -23,26 +23,6 @@ export default function CreateChannel() {
       description: "",
     },
   });
-
-  const onSubmit = async (data: InsertChannel) => {
-    console.log("Form submitted with data:", data);
-    if (!user) {
-      console.error("No user found");
-      toast({
-        title: "Error",
-        description: "You must be logged in to create a channel",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const channelData = {
-      ...data,
-      userId: user.id
-    };
-    console.log("Submitting channel with data:", channelData);
-    await createChannelMutation.mutate(channelData);
-  };
 
   const createChannelMutation = useMutation({
     mutationFn: async (data: InsertChannel) => {
@@ -55,17 +35,15 @@ export default function CreateChannel() {
       }
       return await response.json();
     },
-    onSuccess: (channel) => {
-      console.log("Channel created:", channel);
+    onSuccess: () => {
+      console.log("Channel created successfully");
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
       toast({
         title: "Channel created!",
         description: "Your channel has been created successfully.",
       });
-      // Remove setTimeout and directly navigate
-      console.log("Current location:", location);
-      console.log("Navigating to /articles/new");
-      setLocation("/articles/new");
+      // Immediate navigation after success
+      window.location.href = "/articles/new";
     },
     onError: (error: Error) => {
       console.error("Creation failed:", error);
@@ -77,11 +55,28 @@ export default function CreateChannel() {
     },
   });
 
-  // Add redirect check
-  if (createChannelMutation.isSuccess) {
-    console.log("Mutation succeeded, redirecting");
-    return <Redirect to="/articles/new" />;
-  }
+  const onSubmit = async (data: InsertChannel) => {
+    try {
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to create a channel",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const channelData = {
+        ...data,
+        userId: user.id
+      };
+
+      console.log("Submitting channel data:", channelData);
+      await createChannelMutation.mutateAsync(channelData);
+    } catch (error) {
+      console.error("Form submission error:", error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -94,7 +89,6 @@ export default function CreateChannel() {
           <form 
             onSubmit={(e) => {
               e.preventDefault();
-              console.log("Form submitted!");
               form.handleSubmit(onSubmit)(e);
             }}
             className="space-y-6"
