@@ -30,6 +30,7 @@ export default function ChannelPage() {
 
   const { data: articles, isLoading: loadingArticles } = useQuery<Article[]>({
     queryKey: [`/api/channels/${id}/articles`],
+    select: (data) => data || [], // Ensure we always have an array
   });
 
   const isOwner = user?.id === channel?.userId;
@@ -48,7 +49,9 @@ export default function ChannelPage() {
     if (sortField === "createdAt") {
       return multiplier * (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     }
-    return multiplier * (a[sortField] < b[sortField] ? -1 : 1);
+    const aValue = a[sortField] || "";
+    const bValue = b[sortField] || "";
+    return multiplier * (aValue < bValue ? -1 : 1);
   });
 
   if (loadingChannel || loadingArticles) {

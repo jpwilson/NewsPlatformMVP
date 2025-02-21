@@ -82,12 +82,12 @@ export default function ArticlePage() {
                 onClick={handleChannelClick}
                 className="text-primary hover:underline"
               >
-                📢 {article.channelName}
+                {article.channelName}
               </button>
             </div>
           </header>
 
-          <div 
+          <div
             className="prose prose-lg max-w-none mb-8"
             dangerouslySetInnerHTML={{ __html: article.content }}
           />

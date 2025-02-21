@@ -48,7 +48,7 @@ export function ArticleCard({ article }: { article: Article }) {
                   onClick={handleChannelClick}
                   className="text-primary hover:underline"
                 >
-                  📢 {article.channelName}
+                  {article.channelName}
                 </button>
               </div>
             </div>
