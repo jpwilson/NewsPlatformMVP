@@ -33,24 +33,24 @@ export function ArticleCard({ article }: { article: Article }) {
     <>
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <Link href={`/articles/${article.id}`}>
-                <h3 className="text-xl font-semibold hover:underline cursor-pointer">
-                  {article.title}
-                </h3>
-              </Link>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+          <div className="space-y-2">
+            <Link href={`/articles/${article.id}`}>
+              <h3 className="text-xl font-semibold hover:underline cursor-pointer">
+                {article.title}
+              </h3>
+            </Link>
+            <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
                 <span>{new Date(article.createdAt).toLocaleDateString()}</span>
                 {article.location && <span>📍 {article.location}</span>}
                 <span>📂 {article.category}</span>
-                <button
-                  onClick={handleChannelClick}
-                  className="text-primary hover:underline"
-                >
-                  {article.channelName}
-                </button>
               </div>
+              <button
+                onClick={handleChannelClick}
+                className="text-primary hover:underline w-fit"
+              >
+                By: {article.channel?.name || 'Unknown Channel'}
+              </button>
             </div>
           </div>
         </CardHeader>

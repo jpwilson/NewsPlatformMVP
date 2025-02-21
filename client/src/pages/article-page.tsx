@@ -72,17 +72,17 @@ export default function ArticlePage() {
         <article className="container mx-auto p-4 lg:p-8 max-w-4xl">
           <header className="mb-8">
             <h1 className="text-4xl font-bold mb-4">{article.title}</h1>
-            <div className="flex items-center gap-4 text-muted-foreground">
-              <span>
-                {new Date(article.createdAt).toLocaleDateString()}
-              </span>
-              {article.location && <span>📍 {article.location}</span>}
-              <span>📂 {article.category}</span>
+            <div className="flex flex-col gap-2 text-muted-foreground">
+              <div className="flex items-center gap-4">
+                <span>{new Date(article.createdAt).toLocaleDateString()}</span>
+                {article.location && <span>📍 {article.location}</span>}
+                <span>📂 {article.category}</span>
+              </div>
               <button
                 onClick={handleChannelClick}
-                className="text-primary hover:underline"
+                className="text-primary hover:underline w-fit"
               >
-                {article.channelName}
+                By: {article.channel?.name || 'Unknown Channel'}
               </button>
             </div>
           </header>
