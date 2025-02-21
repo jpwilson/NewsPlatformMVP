@@ -10,6 +10,7 @@ import HomePage from "@/pages/home-page";
 import ArticlePage from "@/pages/article-page";
 import CreateArticle from "@/pages/create-article";
 import CreateChannel from "@/pages/create-channel";
+import ChannelPage from "@/pages/channel-page"; // Add this import
 
 function Router() {
   return (
@@ -18,6 +19,7 @@ function Router() {
       <ProtectedRoute path="/articles/new" component={CreateArticle} />
       <ProtectedRoute path="/channels/new" component={CreateChannel} />
       <Route path="/articles/:id" component={ArticlePage} />
+      <Route path="/channels/:id" component={ChannelPage} /> {/* Add this route */}
       <Route path="/auth" component={AuthPage} />
       <Route component={NotFound} />
     </Switch>
