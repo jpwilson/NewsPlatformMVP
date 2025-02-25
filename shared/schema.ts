@@ -1,64 +1,67 @@
-import { pgTable, text, serial, integer, boolean, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { sqliteTable } from 'drizzle-orm/sqlite-core';
+import { relations } from "drizzle-orm";
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// Define tables using pgTable for PostgreSQL compatibility, but ensure snake_case for both SQLite and PostgreSQL
+export const users = sqliteTable('users', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  username: text('username').notNull().unique(),
+  password: text('password').notNull()
 });
 
-export const channels = pgTable("channels", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  description: text("description").notNull(),
-  userId: integer("user_id").notNull(),
-  category: text("category"),
-  location: text("location"),
-  bannerImage: text("banner_image"),
-  profileImage: text("profile_image"),
+export const channels = sqliteTable('channels', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  description: text('description').notNull(),
+  userId: integer('userId').notNull(),  // camelCase, not snake_case
+  category: text('category'),
+  location: text('location'),
+  bannerImage: text('bannerImage'),
+  profileImage: text('profileImage')
 });
 
-export const articles = pgTable("articles", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  content: text("content").notNull(),
-  channelId: integer("channel_id").notNull(),
-  userId: integer("user_id").notNull(),
-  category: text("category").notNull(),
-  location: text("location"),
-  published: boolean("published").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
+export const articles = sqliteTable('articles', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  channelId: integer('channelId').notNull(),  // camelCase, not snake_case
+  userId: integer('userId').notNull(),  // camelCase, not snake_case
+  category: text('category').notNull(),
+  location: text('location'),
+  published: integer('published', { mode: 'boolean' }).notNull().default(1),
+  createdAt: text('createdAt').notNull().default('CURRENT_TIMESTAMP'),
 });
 
-export const comments = pgTable("comments", {
-  id: serial("id").primaryKey(),
-  content: text("content").notNull(),
-  articleId: integer("article_id").notNull(),
-  userId: integer("user_id").notNull(),
-  parentId: integer("parent_id"),
-  createdAt: timestamp("created_at").defaultNow(),
+export const comments = sqliteTable('comments', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  content: text('content').notNull(),
+  articleId: integer('articleId').notNull(),  // camelCase, not snake_case
+  userId: integer('userId').notNull(),  // camelCase, not snake_case
+  parentId: integer('parentId'),  // camelCase, not snake_case
+  createdAt: timestamp('createdAt').defaultNow()  // camelCase, not snake_case
 });
 
-export const reactions = pgTable("reactions", {
-  id: serial("id").primaryKey(),
-  articleId: integer("article_id").notNull(),
-  userId: integer("user_id").notNull(),
-  isLike: boolean("is_like").notNull(),
+export const reactions = sqliteTable('reactions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  articleId: integer('articleId').notNull(),  // camelCase, not snake_case
+  userId: integer('userId').notNull(),  // camelCase, not snake_case
+  isLike: boolean('isLike').notNull()
 });
 
-export const subscriptions = pgTable("subscriptions", {
-  id: serial("id").primaryKey(),
-  channelId: integer("channel_id").notNull(),
-  userId: integer("user_id").notNull(),
+export const subscriptions = sqliteTable('subscriptions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  channelId: integer('channelId').notNull(),  // camelCase, not snake_case 
+  userId: integer('userId').notNull()  // camelCase, not snake_case
 });
 
-export const notes = pgTable("notes", {
-  id: serial("id").primaryKey(),
-  content: text("content").notNull(),
-  userId: integer("user_id").notNull(),
-  articleId: integer("article_id"),
-  channelId: integer("channel_id"),
+export const notes = sqliteTable('notes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  content: text('content').notNull(),
+  userId: integer('userId').notNull(),  // camelCase, not snake_case
+  articleId: integer('articleId'),  // camelCase, not snake_case
+  channelId: integer('channelId')  // camelCase, not snake_case
 });
 
 export const insertUserSchema = createInsertSchema(users);
@@ -67,8 +70,8 @@ export const insertChannelSchema = createInsertSchema(channels).extend({
   description: z.string().min(1, "Description is required"),
   category: z.string().optional(),
   location: z.string().optional(),
-  bannerImage: z.string().optional(),
-  profileImage: z.string().optional(),
+  banner_image: z.string().optional(),
+  profile_image: z.string().optional(),
 });
 export const insertArticleSchema = createInsertSchema(articles).omit({ 
   createdAt: true 

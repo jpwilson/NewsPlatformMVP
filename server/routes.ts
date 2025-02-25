@@ -2,7 +2,30 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage";
-import { insertArticleSchema, insertChannelSchema, insertCommentSchema } from "@shared/schema";
+import { insertArticleSchema, insertCommentSchema } from "@shared/schema";
+import { z } from "zod";
+
+// Update the channel schema for creation (separate from the full channel schema)
+const insertChannelSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  category: z.string().optional(),
+  location: z.string().optional(),
+  bannerImage: z.string().optional(),
+  profileImage: z.string().optional(),
+  // Note: No 'id' required here since it will be auto-generated
+});
+
+// Add this schema for article insertion
+const insertArticleSchema = z.object({
+  title: z.string().min(1),
+  content: z.string().min(1),
+  channelId: z.number(),
+  category: z.string().min(1),
+  location: z.string().optional(),
+  published: z.boolean().optional(),
+  // Note: id is NOT required here since it will be auto-generated
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
@@ -10,18 +33,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Channels
   app.post("/api/channels", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
+    
     try {
-      console.log('Received channel data:', req.body);
-      const channelData = insertChannelSchema.parse({
-        ...req.body,
-        userId: req.user.id,  // Make sure we're using the authenticated user's ID
+      // Parse and validate the incoming data with the insert schema
+      const channelData = insertChannelSchema.parse(req.body);
+      
+      console.log("Received channel data:", {
+        ...channelData,
+        userId: req.user.id
       });
-      const channel = await storage.createChannel(channelData);
-      console.log('Created channel:', channel);
+      
+      // Create the channel with the validated data
+      const channel = await storage.createChannel({
+        ...channelData,
+        userId: req.user.id
+      });
+      
       res.json(channel);
     } catch (error) {
-      console.error('Channel creation error:', error);
-      res.status(400).json({ message: error instanceof Error ? error.message : 'Failed to create channel' });
+      console.error("Channel creation error:", error);
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: JSON.stringify(error.errors, null, 2) });
+      }
+      
+      res.status(500).json({ message: "Failed to create channel" });
     }
   });
 
@@ -39,12 +75,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Articles
   app.post("/api/articles", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const articleData = insertArticleSchema.parse(req.body);
-    const article = await storage.createArticle({
-      ...articleData,
-      userId: req.user.id,
-    });
-    res.json(article);
+    
+    try {
+      // Parse and validate with the insertion schema
+      const articleData = insertArticleSchema.parse(req.body);
+      
+      console.log("Submitting article with data:", {
+        ...articleData,
+        userId: req.user.id
+      });
+      
+      const article = await storage.createArticle({
+        ...articleData,
+        userId: req.user.id
+      });
+      
+      res.json(article);
+    } catch (error) {
+      console.error("Article creation error:", error);
+      
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: JSON.stringify(error.errors, null, 2) });
+      }
+      
+      res.status(500).json({ message: "Failed to create article" });
+    }
   });
 
   app.get("/api/articles", async (req, res) => {
