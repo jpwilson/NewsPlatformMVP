@@ -1,9 +1,18 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
-import { storage } from "./storage";
+import { storage } from "./storage-supabase";
 import { insertArticleSchema, insertCommentSchema } from "@shared/schema";
 import { z } from "zod";
+
+declare global {
+  namespace Express {
+    interface User {
+      id: number;
+      username: string;
+    }
+  }
+}
 
 // Update the channel schema for creation (separate from the full channel schema)
 const insertChannelSchema = z.object({
@@ -14,17 +23,6 @@ const insertChannelSchema = z.object({
   bannerImage: z.string().optional(),
   profileImage: z.string().optional(),
   // Note: No 'id' required here since it will be auto-generated
-});
-
-// Add this schema for article insertion
-const insertArticleSchema = z.object({
-  title: z.string().min(1),
-  content: z.string().min(1),
-  channelId: z.number(),
-  category: z.string().min(1),
-  location: z.string().optional(),
-  published: z.boolean().optional(),
-  // Note: id is NOT required here since it will be auto-generated
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {

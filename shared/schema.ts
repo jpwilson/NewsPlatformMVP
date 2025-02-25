@@ -1,78 +1,103 @@
 import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { sqliteTable } from 'drizzle-orm/sqlite-core';
 import { relations } from "drizzle-orm";
 
-// Define tables using pgTable for PostgreSQL compatibility, but ensure snake_case for both SQLite and PostgreSQL
-export const users = sqliteTable('users', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+// Define tables using pgTable for PostgreSQL (Supabase)
+export const users = pgTable('users', {
+  id: serial('id').primaryKey(),
   username: text('username').notNull().unique(),
   password: text('password').notNull()
 });
 
-export const channels = sqliteTable('channels', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const channels = pgTable('channels', {
+  id: serial('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description').notNull(),
-  userId: integer('userId').notNull(),  // camelCase, not snake_case
+  userId: integer('user_id').notNull(),
   category: text('category'),
   location: text('location'),
-  bannerImage: text('bannerImage'),
-  profileImage: text('profileImage')
+  bannerImage: text('banner_image'),
+  profileImage: text('profile_image')
 });
 
-export const articles = sqliteTable('articles', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const articles = pgTable('articles', {
+  id: serial('id').primaryKey(),
   title: text('title').notNull(),
   content: text('content').notNull(),
-  channelId: integer('channelId').notNull(),  // camelCase, not snake_case
-  userId: integer('userId').notNull(),  // camelCase, not snake_case
+  channelId: integer('channel_id').notNull(),
+  userId: integer('user_id').notNull(),
   category: text('category').notNull(),
   location: text('location'),
-  published: integer('published', { mode: 'boolean' }).notNull().default(1),
-  createdAt: text('createdAt').notNull().default('CURRENT_TIMESTAMP'),
+  published: boolean('published').notNull().default(true),
+  createdAt: timestamp('created_at').defaultNow()
 });
 
-export const comments = sqliteTable('comments', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const comments = pgTable('comments', {
+  id: serial('id').primaryKey(),
   content: text('content').notNull(),
-  articleId: integer('articleId').notNull(),  // camelCase, not snake_case
-  userId: integer('userId').notNull(),  // camelCase, not snake_case
-  parentId: integer('parentId'),  // camelCase, not snake_case
-  createdAt: timestamp('createdAt').defaultNow()  // camelCase, not snake_case
+  articleId: integer('article_id').notNull(),
+  userId: integer('user_id').notNull(),
+  parentId: integer('parent_id'),
+  createdAt: timestamp('created_at').defaultNow()
 });
 
-export const reactions = sqliteTable('reactions', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  articleId: integer('articleId').notNull(),  // camelCase, not snake_case
-  userId: integer('userId').notNull(),  // camelCase, not snake_case
-  isLike: boolean('isLike').notNull()
+export const reactions = pgTable('reactions', {
+  id: serial('id').primaryKey(),
+  articleId: integer('article_id').notNull(),
+  userId: integer('user_id').notNull(),
+  isLike: boolean('is_like').notNull()
 });
 
-export const subscriptions = sqliteTable('subscriptions', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  channelId: integer('channelId').notNull(),  // camelCase, not snake_case 
-  userId: integer('userId').notNull()  // camelCase, not snake_case
+export const subscriptions = pgTable('subscriptions', {
+  id: serial('id').primaryKey(),
+  channelId: integer('channel_id').notNull(),
+  userId: integer('user_id').notNull()
 });
 
-export const notes = sqliteTable('notes', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
+export const notes = pgTable('notes', {
+  id: serial('id').primaryKey(),
   content: text('content').notNull(),
-  userId: integer('userId').notNull(),  // camelCase, not snake_case
-  articleId: integer('articleId'),  // camelCase, not snake_case
-  channelId: integer('channelId')  // camelCase, not snake_case
+  userId: integer('user_id').notNull(),
+  articleId: integer('article_id'),
+  channelId: integer('channel_id')
 });
 
+// Define schema relations
+export const usersRelations = relations(users, ({ many }) => ({
+  channels: many(channels),
+  articles: many(articles),
+  comments: many(comments),
+  reactions: many(reactions),
+  subscriptions: many(subscriptions),
+  notes: many(notes)
+}));
+
+export const channelsRelations = relations(channels, ({ one, many }) => ({
+  user: one(users, {
+    fields: [channels.userId],
+    references: [users.id]
+  }),
+  articles: many(articles),
+  subscriptions: many(subscriptions)
+}));
+
+export const articlesRelations = relations(articles, ({ one, many }) => ({
+  channel: one(channels, {
+    fields: [articles.channelId],
+    references: [channels.id]
+  }),
+  user: one(users, {
+    fields: [articles.userId],
+    references: [users.id]
+  }),
+  comments: many(comments),
+  reactions: many(reactions)
+}));
+
+// Create Zod schemas from Drizzle schema
 export const insertUserSchema = createInsertSchema(users);
-export const insertChannelSchema = createInsertSchema(channels).extend({
-  name: z.string().min(1, "Channel name is required"),
-  description: z.string().min(1, "Description is required"),
-  category: z.string().optional(),
-  location: z.string().optional(),
-  banner_image: z.string().optional(),
-  profile_image: z.string().optional(),
-});
+export const insertChannelSchema = createInsertSchema(channels);
 export const insertArticleSchema = createInsertSchema(articles).omit({ 
   createdAt: true 
 });
@@ -83,6 +108,7 @@ export const insertReactionSchema = createInsertSchema(reactions);
 export const insertSubscriptionSchema = createInsertSchema(subscriptions);
 export const insertNoteSchema = createInsertSchema(notes);
 
+// Export types
 export type User = typeof users.$inferSelect;
 export type Channel = typeof channels.$inferSelect;
 export type Article = typeof articles.$inferSelect;
