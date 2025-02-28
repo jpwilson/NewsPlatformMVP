@@ -24,6 +24,8 @@ import {
 } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import { IStorage } from './storage';
+import { supabase } from './supabase';
+import bcrypt from 'bcrypt';
 
 // Implement the storage interface using Drizzle with PostgreSQL
 export const storage: IStorage = {
@@ -38,9 +40,39 @@ export const storage: IStorage = {
     return result.length > 0 ? result[0] : null;
   },
   
-  async createUser(user: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(user).returning();
-    return result[0];
+  async createUser({ username, password, supabase_uid }: { 
+    username: string; 
+    password: string;
+    supabase_uid?: string;
+  }): Promise<User> {
+    // Check if username already exists
+    const existingUser = await getUserByUsername(username);
+    if (existingUser) {
+      throw new Error('Username already exists');
+    }
+
+    // Only hash password if it's provided (for non-OAuth users)
+    const hashedPassword = password ? await bcrypt.hash(password, 10) : '';
+
+    // Insert the new user
+    const { data, error } = await supabase
+      .from('users')
+      .insert([
+        { 
+          username, 
+          password: hashedPassword,
+          supabase_uid: supabase_uid || null
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating user:', error);
+      throw new Error('Failed to create user');
+    }
+
+    return data as User;
   },
   
   // Channels
@@ -126,3 +158,24 @@ export const storage: IStorage = {
     return result[0];
   }
 };
+
+// Add this function to get a user by Supabase ID
+export async function getUserBySupabaseId(supabaseUid: string): Promise<User | null> {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('supabase_uid', supabaseUid)
+      .single();
+    
+    if (error || !data) {
+      console.log('No user found with supabase_uid:', supabaseUid);
+      return null;
+    }
+    
+    return data as User;
+  } catch (error) {
+    console.error('Error getting user by Supabase ID:', error);
+    return null;
+  }
+}
