@@ -102,6 +102,11 @@ export default function AuthPage() {
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth-callback`,
+          scopes: "email profile",
+          queryParams: {
+            prompt: "consent",
+            access_type: "offline",
+          },
         },
       });
 
@@ -109,7 +114,6 @@ export default function AuthPage() {
         console.error("Error signing in with Google:", error);
         setError(error.message);
       }
-      // No need to handle success case as the redirect will happen automatically
     } catch (err) {
       console.error("Unexpected error during Google sign-in:", err);
       setError("An unexpected error occurred");
