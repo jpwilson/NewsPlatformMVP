@@ -12,6 +12,7 @@ import CreateArticle from "@/pages/create-article";
 import CreateChannel from "@/pages/create-channel";
 import ChannelPage from "@/pages/channel-page"; // Add this import
 import AuthCallback from "./pages/auth-callback";
+import ProfilePage from "./pages/profile-page";
 
 function Router() {
   return (
@@ -24,6 +25,7 @@ function Router() {
       {/* Add this route */}
       <Route path="/auth" component={AuthPage} />
       <Route path="/auth-callback" component={AuthCallback} />
+      <Route path="/profile" component={ProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );

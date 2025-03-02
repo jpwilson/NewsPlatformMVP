@@ -6,17 +6,26 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Newspaper, User, LogOut } from "lucide-react";
 
-export function NavigationBar({ hideAuthButtons = false }: { hideAuthButtons?: boolean }) {
+export function NavigationBar({
+  hideAuthButtons = false,
+}: {
+  hideAuthButtons?: boolean;
+}) {
   const { user, logoutMutation } = useAuth();
   const [, setLocation] = useLocation();
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
 
   return (
     <header className="border-b">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <button 
+        <button
           onClick={() => setLocation("/")}
           className="flex items-center gap-2 cursor-pointer"
         >
@@ -25,17 +34,23 @@ export function NavigationBar({ hideAuthButtons = false }: { hideAuthButtons?: b
         </button>
 
         <nav>
-          {!hideAuthButtons && (
-            user ? (
+          {!hideAuthButtons &&
+            (user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <User className="h-4 w-4 mr-2" />
+                  <Button
+                    variant="ghost"
+                    className="relative h-8 bg-background"
+                  >
                     {user.username}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => logoutMutation.mutate()}>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                  <DropdownMenuItem asChild>
+                    <Link href="/profile">Profile</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="h-4 w-4 mr-2" />
                     Logout
                   </DropdownMenuItem>
@@ -45,8 +60,7 @@ export function NavigationBar({ hideAuthButtons = false }: { hideAuthButtons?: b
               <Link href="/auth">
                 <Button size="sm">Login</Button>
               </Link>
-            )
-          )}
+            ))}
         </nav>
       </div>
     </header>
