@@ -104,7 +104,7 @@ export default function AuthPage() {
           redirectTo: `${window.location.origin}/auth-callback`,
           scopes: "email profile",
           queryParams: {
-            prompt: "consent",
+            prompt: "select_account",
             access_type: "offline",
           },
         },

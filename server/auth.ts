@@ -101,6 +101,9 @@ export function setupAuth(app: Express) {
           clientID: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
           callbackURL: "/api/auth/google/callback",
+          prompt: "select_account",
+          accessType: "offline",
+          includeGrantedScopes: true
         },
         async (accessToken, refreshToken, profile, done) => {
           // For now, just log the profile info to verify it's working
