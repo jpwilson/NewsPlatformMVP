@@ -42,11 +42,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id
       });
       
-      // Create the channel with the validated data
-      const channel = await storage.createChannel({
-        ...channelData,
-        userId: req.user.id
-      });
+      // Insert the channel with created_at timestamp
+      const { data: channel, error } = await supabase
+        .from("channels")
+        .insert([{
+          ...channelData,
+          user_id: req.user.id,
+          created_at: new Date().toISOString() // Add creation timestamp
+        }])
+        .select()
+        .single();
+      
+      if (error) throw error;
       
       res.json(channel);
     } catch (error) {
@@ -66,9 +73,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/channels/:id", async (req, res) => {
-    const channel = await storage.getChannel(parseInt(req.params.id));
-    if (!channel) return res.sendStatus(404);
-    res.json(channel);
+    try {
+      const { id } = req.params;
+      
+      // Fetch the channel directly from Supabase to get all fields including created_at
+      const { data: channel, error } = await supabase
+        .from("channels")
+        .select("*")
+        .eq("id", id)
+        .single();
+      
+      if (error) throw error;
+      
+      if (!channel) {
+        return res.status(404).json({ error: "Channel not found" });
+      }
+      
+      res.json(channel);
+    } catch (error) {
+      console.error("Error fetching channel:", error);
+      res.status(500).json({ error: "Failed to fetch channel" });
+    }
   });
 
   // Fetch articles by channel ID
@@ -254,6 +279,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       req.user.id
     );
     res.sendStatus(200);
+  });
+
+  // Get channels that a user is subscribed to
+  app.get("/api/user/subscriptions", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      // First, fetch the user's subscriptions
+      const { data: subscriptions, error: subscriptionsError } = await supabase
+        .from("subscriptions")
+        .select("channel_id")
+        .eq("user_id", req.user.id);
+      
+      if (subscriptionsError) throw subscriptionsError;
+      
+      if (!subscriptions || subscriptions.length === 0) {
+        return res.json([]);
+      }
+      
+      // Then fetch details of those channels
+      const channelIds = subscriptions.map(sub => sub.channel_id);
+      
+      const { data: channels, error: channelsError } = await supabase
+        .from("channels")
+        .select("*")
+        .in("id", channelIds);
+        
+      if (channelsError) throw channelsError;
+      
+      res.json(channels || []);
+    } catch (error) {
+      console.error("Error fetching user subscriptions:", error);
+      res.status(500).json({ error: "Failed to fetch subscriptions" });
+    }
+  });
+
+  // Get user information by ID
+  app.get("/api/users/:id", async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Return user info without sensitive data
+      const { password, ...userInfo } = user;
+      res.json(userInfo);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
   });
 
   const httpServer = createServer(app);
