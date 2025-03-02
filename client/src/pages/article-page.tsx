@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ThumbsUp, ThumbsDown, Loader2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { formatDate } from "@/lib/date-utils";
 import { useState } from "react";
 import {
   AlertDialog,
@@ -18,13 +19,20 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 
+// Define a more flexible type for article that accommodates both camelCase and snake_case
+type ArticleWithSnakeCase = Article & {
+  created_at?: string | Date;
+  channel_id?: number;
+  channel?: { id: number; name: string };
+};
+
 export default function ArticlePage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [showAuthDialog, setShowAuthDialog] = useState(false);
 
-  const { data: article, isLoading } = useQuery<Article>({
+  const { data: article, isLoading } = useQuery<ArticleWithSnakeCase>({
     queryKey: [`/api/articles/${id}`],
   });
 
@@ -38,7 +46,14 @@ export default function ArticlePage() {
     if (!user) {
       setShowAuthDialog(true);
     } else {
-      setLocation(`/channels/${article?.channelId}`);
+      // Use either channelId or channel_id, checking for existence
+      const channelId = article?.channel_id || article?.channelId;
+      // Only navigate if channelId exists
+      if (channelId) {
+        setLocation(`/channels/${channelId}`);
+      } else {
+        console.error("No channel ID found for this article");
+      }
     }
   };
 
@@ -74,7 +89,9 @@ export default function ArticlePage() {
             <h1 className="text-4xl font-bold mb-4">{article.title}</h1>
             <div className="flex flex-col gap-2 text-muted-foreground">
               <div className="flex items-center gap-4">
-                <span>{new Date(article.createdAt).toLocaleDateString()}</span>
+                <span>
+                  {formatDate(article.created_at || article.createdAt)}
+                </span>
                 {article.location && <span>📍 {article.location}</span>}
                 <span>📂 {article.category}</span>
               </div>
@@ -82,7 +99,7 @@ export default function ArticlePage() {
                 onClick={handleChannelClick}
                 className="text-primary hover:underline w-fit"
               >
-                By: {article.channel?.name || 'Unknown Channel'}
+                By: {article.channel?.name || "Unknown Channel"}
               </button>
             </div>
           </header>
@@ -129,9 +146,7 @@ export default function ArticlePage() {
             <AlertDialogCancel onClick={() => setShowAuthDialog(false)}>
               Cancel
             </AlertDialogCancel>
-            <Button onClick={() => setLocation("/auth")}>
-              Sign In
-            </Button>
+            <Button onClick={() => setLocation("/auth")}>Sign In</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
