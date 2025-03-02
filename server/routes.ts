@@ -71,6 +71,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(channel);
   });
 
+  // Fetch articles by channel ID
+  app.get("/api/channels/:id/articles", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Fetch articles for this channel
+      const { data: articles, error } = await supabase
+        .from("articles")
+        .select("*")
+        .eq("channel_id", id)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      
+      res.json(articles || []);
+    } catch (error) {
+      console.error("Error fetching channel articles:", error);
+      res.status(500).json({ error: "Failed to fetch channel articles" });
+    }
+  });
+
   // Articles
   app.post("/api/articles", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -114,7 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // If we have articles, fetch the related channels
       if (articles && articles.length > 0) {
         // Extract all unique channel IDs
-        const channelIds = [...new Set(articles.map(article => article.channel_id))];
+        const channelIds = Array.from(new Set(articles.map(article => article.channel_id)));
         
         // Fetch all relevant channels in a single query
         const { data: channels, error: channelsError } = await supabase
