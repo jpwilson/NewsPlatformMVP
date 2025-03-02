@@ -45,6 +45,12 @@ const formatDate = (dateString: string | Date | null | undefined): string => {
   }
 };
 
+// Define a more flexible type for article that accommodates both camelCase and snake_case
+type ArticleWithSnakeCase = Article & {
+  created_at?: string | Date;
+  channel_id?: number;
+};
+
 export default function ChannelPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
@@ -60,7 +66,9 @@ export default function ChannelPage() {
     });
 
   // Fetch articles for this channel
-  const { data: articles, isLoading: loadingArticles } = useQuery<Article[]>({
+  const { data: articles, isLoading: loadingArticles } = useQuery<
+    ArticleWithSnakeCase[]
+  >({
     queryKey: [`/api/channels/${id}/articles`],
     select: (data) => data || [], // Ensure we always have an array
   });
@@ -110,8 +118,14 @@ export default function ChannelPage() {
   const sortedArticles = articles?.slice().sort((a, b) => {
     const multiplier = sortOrder === "asc" ? 1 : -1;
     if (sortField === "createdAt") {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      const dateA =
+        a.createdAt || a.created_at
+          ? new Date(a.createdAt || a.created_at!).getTime()
+          : 0;
+      const dateB =
+        b.createdAt || b.created_at
+          ? new Date(b.createdAt || b.created_at!).getTime()
+          : 0;
       return multiplier * (dateA - dateB);
     }
     const aValue = a[sortField] || "";
@@ -297,7 +311,9 @@ export default function ChannelPage() {
                         </a>
                       </TableCell>
                       <TableCell>{article.category}</TableCell>
-                      <TableCell>{formatDate(article.createdAt)}</TableCell>
+                      <TableCell>
+                        {formatDate(article.createdAt || article.created_at)}
+                      </TableCell>
                     </TableRow>
                   ))}
                   {!sortedArticles?.length && (
