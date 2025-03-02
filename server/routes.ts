@@ -4,6 +4,7 @@ import { setupAuth } from "./auth";
 import { storage } from "./storage-supabase";
 import { insertArticleSchema, insertCommentSchema } from "@shared/schema";
 import { z } from "zod";
+import { supabase } from "./supabase";
 
 declare global {
   namespace Express {
@@ -101,14 +102,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/articles", async (req, res) => {
-    const articles = await storage.listArticles();
-    res.json(articles);
+    try {
+      // First, fetch the articles
+      const { data: articles, error } = await supabase
+        .from("articles")
+        .select("*")
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      
+      // If we have articles, fetch the related channels
+      if (articles && articles.length > 0) {
+        // Extract all unique channel IDs
+        const channelIds = [...new Set(articles.map(article => article.channel_id))];
+        
+        // Fetch all relevant channels in a single query
+        const { data: channels, error: channelsError } = await supabase
+          .from("channels")
+          .select("id, name")
+          .in("id", channelIds);
+          
+        if (channelsError) throw channelsError;
+        
+        // Map channels to articles
+        const articlesWithChannels = articles.map(article => {
+          const channel = channels?.find(c => c.id === article.channel_id);
+          return {
+            ...article,
+            channel: channel || null
+          };
+        });
+        
+        res.json(articlesWithChannels);
+      } else {
+        res.json(articles || []);
+      }
+    } catch (error) {
+      console.error("Error fetching articles:", error);
+      res.status(500).json({ error: "Failed to fetch articles" });
+    }
   });
 
   app.get("/api/articles/:id", async (req, res) => {
-    const article = await storage.getArticle(parseInt(req.params.id));
-    if (!article) return res.sendStatus(404);
-    res.json(article);
+    try {
+      const { id } = req.params;
+      
+      // Fetch the article
+      const { data: article, error } = await supabase
+        .from("articles")
+        .select("*")
+        .eq("id", id)
+        .single();
+      
+      if (error) throw error;
+      
+      // Fetch the related channel
+      if (article && article.channel_id) {
+        const { data: channel, error: channelError } = await supabase
+          .from("channels")
+          .select("id, name")
+          .eq("id", article.channel_id)
+          .single();
+          
+        if (!channelError && channel) {
+          article.channel = channel;
+        }
+      }
+      
+      res.json(article);
+    } catch (error) {
+      console.error("Error fetching article:", error);
+      res.status(500).json({ error: "Failed to fetch article" });
+    }
   });
 
   app.patch("/api/articles/:id", async (req, res) => {
