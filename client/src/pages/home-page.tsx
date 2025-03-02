@@ -34,7 +34,7 @@ export default function HomePage() {
             <Link href="/articles/new">
               <Button>
                 <PlusCircle className="h-4 w-4 mr-2" />
-                New Article
+                Write an Article
               </Button>
             </Link>
           )}

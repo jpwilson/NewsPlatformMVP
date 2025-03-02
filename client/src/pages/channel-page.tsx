@@ -32,6 +32,7 @@ type SortOrder = "asc" | "desc";
 // Extended Channel type that includes created_at
 type ExtendedChannel = Channel & {
   created_at?: string;
+  user_id?: number;
 };
 
 // Helper function to format date safely
@@ -85,11 +86,11 @@ export default function ChannelPage() {
   const { data: ownerInfo, isLoading: loadingOwner } = useQuery<
     Omit<User, "password">
   >({
-    queryKey: [`/api/users/${channel?.userId}`],
-    enabled: !!channel?.userId,
+    queryKey: [`/api/users/${channel?.user_id || channel?.userId}`],
+    enabled: !!(channel?.user_id || channel?.userId),
   });
 
-  const isOwner = user?.id === channel?.userId;
+  const isOwner = user?.id === (channel?.user_id || channel?.userId);
   const isSubscribed =
     subscriptions?.some((sub: Channel) => sub.id === Number(id)) || false;
 
@@ -337,7 +338,10 @@ export default function ChannelPage() {
                       href={`/profile`}
                       className="text-primary hover:underline"
                     >
-                      {ownerInfo?.username || `User #${channel.userId}`}
+                      {ownerInfo?.username ||
+                        `User #${
+                          channel?.user_id || channel?.userId || "unknown"
+                        }`}
                     </Link>
                   </div>
                 </div>

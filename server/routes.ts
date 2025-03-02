@@ -319,15 +319,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/users/:id", async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
-      const user = await storage.getUser(userId);
+      console.log(`Getting user with ID: ${userId}`);
       
-      if (!user) {
+      // Use Supabase directly for simplicity
+      const { data: user, error } = await supabase
+        .from("users")
+        .select("id, username, supabase_uid")
+        .eq("id", userId)
+        .single();
+      
+      console.log(`User data retrieved:`, user, `Error:`, error);
+      
+      if (error || !user) {
+        console.log(`User not found for ID: ${userId}`);
         return res.status(404).json({ error: "User not found" });
       }
       
-      // Return user info without sensitive data
-      const { password, ...userInfo } = user;
-      res.json(userInfo);
+      res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ error: "Failed to fetch user" });
