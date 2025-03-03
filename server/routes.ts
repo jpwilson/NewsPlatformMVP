@@ -170,16 +170,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
         if (channelsError) throw channelsError;
         
-        // Map channels to articles
-        const articlesWithChannels = articles.map(article => {
-          const channel = channels?.find(c => c.id === article.channel_id);
+        // For each article, fetch reaction counts and comment counts
+        const enrichedArticles = await Promise.all(articles.map(async article => {
+          // Find the channel for this article
+          const channel = channels?.find(c => c.id === article.channel_id) || null;
+          
+          // Get reaction counts
+          const { data: reactions, error: reactionsError } = await supabase
+            .from("reactions")
+            .select("is_like, user_id")
+            .eq("article_id", article.id);
+            
+          let likes = 0;
+          let dislikes = 0;
+          let userReaction = null;
+          
+          if (!reactionsError && reactions) {
+            likes = reactions.filter(r => r.is_like).length;
+            dislikes = reactions.filter(r => !r.is_like).length;
+            
+            // If user is authenticated, check if they have reacted
+            if (req.isAuthenticated()) {
+              const userReactionData = reactions.find(r => 
+                r.user_id === req.user.id
+              );
+              
+              if (userReactionData) {
+                userReaction = userReactionData.is_like;
+              }
+            }
+          }
+          
+          // Get comment count
+          const { data: commentCountData, error: commentCountError } = await supabase
+            .from("comments")
+            .select("*", { count: "exact", head: true })
+            .eq("article_id", article.id);
+            
+          // Ensure view_count is present, defaulting to 0 if not
+          const viewCount = article.view_count || 0;
+            
           return {
             ...article,
-            channel: channel || null
+            channel,
+            likes,
+            dislikes,
+            viewCount,
+            userReaction,
+            _count: { 
+              comments: commentCountError ? 0 : (commentCountData?.length || 0)
+            }
           };
-        });
+        }));
         
-        res.json(articlesWithChannels);
+        res.json(enrichedArticles);
       } else {
         res.json(articles || []);
       }
@@ -214,6 +258,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
           article.channel = channel;
         }
       }
+      
+      // Fetch reaction counts
+      const { data: reactions, error: reactionsError } = await supabase
+        .from("reactions")
+        .select("is_like, user_id")
+        .eq("article_id", id);
+        
+      if (!reactionsError && reactions) {
+        const likes = reactions.filter(r => r.is_like).length;
+        const dislikes = reactions.filter(r => !r.is_like).length;
+        article.likes = likes;
+        article.dislikes = dislikes;
+      }
+      
+      // If user is authenticated, check if they have reacted
+      if (req.isAuthenticated()) {
+        const { data: userReaction, error: userReactionError } = await supabase
+          .from("reactions")
+          .select("is_like")
+          .eq("article_id", id)
+          .eq("user_id", req.user.id)
+          .maybeSingle();
+          
+        if (!userReactionError && userReaction) {
+          article.userReaction = userReaction.is_like;
+        }
+      }
+      
+      // Get comment count
+      const { data: commentCountData, error: commentCountError } = await supabase
+        .from("comments")
+        .select("*", { count: "exact", head: true })
+        .eq("article_id", id);
+        
+      if (!commentCountError) {
+        article._count = { comments: commentCountData?.length || 0 };
+      }
+      
+      // Ensure viewCount is included in the response
+      article.viewCount = article.view_count || 0;
       
       res.json(article);
     } catch (error) {
@@ -254,12 +338,163 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reactions
   app.post("/api/articles/:id/reactions", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const reaction = await storage.createReaction({
-      articleId: parseInt(req.params.id),
-      userId: req.user.id,
-      isLike: req.body.isLike,
-    });
-    res.json(reaction);
+    
+    try {
+      const articleId = parseInt(req.params.id);
+      const userId = req.user.id;
+      const isLike = req.body.isLike;
+      
+      console.log("Processing reaction:", { articleId, userId, isLike });
+      
+      // First, clean up any duplicate reactions (temporary fix)
+      try {
+        const { data: duplicates, error: findAllError } = await supabase
+          .from("reactions")
+          .select("id")
+          .eq("article_id", articleId)
+          .eq("user_id", userId);
+          
+        if (findAllError) {
+          console.error("Error finding all reactions:", findAllError);
+        } else if (duplicates && duplicates.length > 1) {
+          console.log(`Found ${duplicates.length} duplicate reactions, keeping only the first one`);
+          
+          // Keep the first one, delete the rest
+          const keepId = duplicates[0].id;
+          const idsToDelete = duplicates.slice(1).map(d => d.id);
+          
+          const { error: cleanupError } = await supabase
+            .from("reactions")
+            .delete()
+            .in("id", idsToDelete);
+            
+          if (cleanupError) {
+            console.error("Error cleaning up duplicate reactions:", cleanupError);
+          } else {
+            console.log(`Successfully deleted ${idsToDelete.length} duplicate reactions`);
+          }
+        }
+      } catch (cleanupError) {
+        console.error("Error in cleanup process:", cleanupError);
+        // Continue with the main operation even if cleanup fails
+      }
+      
+      // Get the single reaction (after cleanup)
+      const { data: existingReactions, error: findError } = await supabase
+        .from("reactions")
+        .select("id, is_like")
+        .eq("article_id", articleId)
+        .eq("user_id", userId)
+        .limit(1);
+      
+      if (findError) {
+        console.error("Error finding existing reaction:", findError);
+        throw findError;
+      }
+      
+      // Get the first reaction if any exist
+      const existingReaction = existingReactions && existingReactions.length > 0 
+        ? existingReactions[0] 
+        : null;
+      
+      console.log("Existing reaction:", existingReaction);
+      
+      // If reaction exists and is the same type, remove it (toggle off)
+      if (existingReaction && existingReaction.is_like === isLike) {
+        const { error: deleteError } = await supabase
+          .from("reactions")
+          .delete()
+          .eq("id", existingReaction.id);
+          
+        if (deleteError) {
+          console.error("Error deleting reaction:", deleteError);
+          throw deleteError;
+        }
+        
+        return res.json({ removed: true, isLike });
+      }
+      
+      // If reaction exists but is different type, update it
+      if (existingReaction) {
+        const { data: updatedReaction, error: updateError } = await supabase
+          .from("reactions")
+          .update({ is_like: isLike })
+          .eq("id", existingReaction.id)
+          .select()
+          .single();
+          
+        if (updateError) {
+          console.error("Error updating reaction:", updateError);
+          throw updateError;
+        }
+        
+        return res.json(updatedReaction);
+      }
+      
+      // Otherwise create a new reaction
+      const { data: newReaction, error: createError } = await supabase
+        .from("reactions")
+        .insert({
+          article_id: articleId,
+          user_id: userId,
+          is_like: isLike
+        })
+        .select()
+        .single();
+        
+      if (createError) {
+        console.error("Error creating reaction:", createError, {
+          article_id: articleId,
+          user_id: userId,
+          is_like: isLike
+        });
+        throw createError;
+      }
+      
+      res.json(newReaction);
+    } catch (error) {
+      console.error("Error handling reaction:", error);
+      res.status(500).json({ error: "Failed to process reaction", details: String(error) });
+    }
+  });
+
+  // Get reactions for an article
+  app.get("/api/articles/:id/reactions", async (req, res) => {
+    try {
+      const articleId = parseInt(req.params.id);
+      
+      // Get all reactions for this article
+      const { data: reactions, error } = await supabase
+        .from("reactions")
+        .select("is_like, user_id")
+        .eq("article_id", articleId);
+        
+      if (error) throw error;
+      
+      // Calculate counts
+      const likes = reactions?.filter(r => r.is_like).length || 0;
+      const dislikes = reactions?.filter(r => !r.is_like).length || 0;
+      
+      // Get user's reaction if authenticated
+      let userReaction = null;
+      if (req.isAuthenticated()) {
+        const { data: userReactionData, error: userError } = await supabase
+          .from("reactions")
+          .select("is_like")
+          .eq("article_id", articleId)
+          .eq("user_id", req.user.id)
+          .maybeSingle();
+          
+        if (!userError && userReactionData) {
+          userReaction = userReactionData.is_like;
+        }
+      }
+      
+      res.json({ likes, dislikes, userReaction });
+    } catch (error) {
+      console.error("Error fetching reactions:", error);
+      res.status(500).json({ error: "Failed to fetch reactions" });
+    }
   });
 
   // Subscriptions
@@ -339,6 +574,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ error: "Failed to fetch user" });
+    }
+  });
+
+  // Add article view endpoint
+  app.post("/api/articles/:id/view", async (req, res) => {
+    try {
+      const articleId = parseInt(req.params.id);
+      
+      // Get user ID if authenticated or use null for anonymous users
+      const userId = req.isAuthenticated() ? req.user.id : null;
+      
+      // Use IP address as client identifier
+      const clientIp = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+      const clientIdentifier = userId ? `user-${userId}` : `ip-${clientIp}`;
+      
+      console.log("Processing view:", { articleId, userId, clientIdentifier });
+      
+      // First, check if view_count column exists in articles table
+      const { data: columnCheck, error: columnError } = await supabase
+        .from('articles')
+        .select('view_count')
+        .limit(1);
+        
+      // If column doesn't exist, create it
+      if (columnError) {
+        console.error("Error checking view_count column:", columnError);
+        // We'll handle this by assuming it might not exist yet
+      }
+      
+      // Then check if article_views table exists
+      const { data: tableCheck, error: tableError } = await supabase
+        .from('article_views')
+        .select('id')
+        .limit(1);
+        
+      // If we get an error, the table might not exist
+      if (tableError) {
+        console.log("article_views table may not exist:", tableError);
+        console.log("Falling back to simple view count increment");
+        
+        // Just increment the view count directly
+        const { data: article } = await supabase
+          .from("articles")
+          .select("view_count")
+          .eq("id", articleId)
+          .single();
+          
+        const currentViews = article?.view_count || 0;
+        
+        await supabase
+          .from("articles")
+          .update({ view_count: currentViews + 1 })
+          .eq("id", articleId);
+          
+        return res.json({ counted: true });
+      }
+      
+      // Check if this client has viewed this article before (ever)
+      const { data: existingViews, error: viewsError } = await supabase
+        .from("article_views")
+        .select("id")
+        .eq("article_id", articleId)
+        .eq("client_identifier", clientIdentifier);
+        
+      if (viewsError) {
+        console.error("Error checking views:", viewsError);
+        return res.status(500).json({ error: "Failed to check view count" });
+      }
+      
+      // If user has already viewed this article before, don't count another view
+      if (existingViews && existingViews.length > 0) {
+        return res.json({ 
+          counted: false, 
+          message: "View already counted for this article",
+          alreadyViewed: true
+        });
+      }
+      
+      // Record this view
+      const { error: insertError } = await supabase
+        .from("article_views")
+        .insert({
+          article_id: articleId,
+          user_id: userId,
+          client_identifier: clientIdentifier
+        });
+        
+      if (insertError) {
+        console.error("Error recording view:", insertError);
+        return res.status(500).json({ error: "Failed to record view" });
+      }
+      
+      // Increment the view count in the articles table
+      const { data: article, error: getError } = await supabase
+        .from("articles")
+        .select("view_count")
+        .eq("id", articleId)
+        .single();
+        
+      if (getError) {
+        console.error("Error getting current view count:", getError);
+        return res.status(500).json({ error: "Failed to get current view count" });
+      }
+      
+      const currentViews = article?.view_count || 0;
+      
+      const { error: updateError } = await supabase
+        .from("articles")
+        .update({ view_count: currentViews + 1 })
+        .eq("id", articleId);
+        
+      if (updateError) {
+        console.error("Error updating view count:", updateError);
+        return res.status(500).json({ error: "Failed to update view count" });
+      }
+      
+      res.json({ 
+        counted: true,
+        firstView: true
+      });
+    } catch (error) {
+      console.error("Error handling view count:", error);
+      res.status(500).json({ error: "Failed to update view count" });
     }
   });
 

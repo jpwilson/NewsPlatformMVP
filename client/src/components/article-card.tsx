@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { MessageSquare, ThumbsUp, ThumbsDown } from "lucide-react";
+import { MessageSquare, ThumbsUp, ThumbsDown, Eye } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { formatDate } from "@/lib/date-utils";
 import {
@@ -20,12 +20,21 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { useState } from "react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 
 // Define a more flexible type for article that accommodates both camelCase and snake_case
 type ArticleWithSnakeCase = Article & {
   created_at?: string | Date;
   channel_id?: number;
   channel?: { id: number; name: string };
+  likes?: number;
+  dislikes?: number;
+  viewCount?: number;
+  userReaction?: boolean | null;
+  _count?: {
+    comments?: number;
+  };
 };
 
 export function ArticleCard({ article }: { article: ArticleWithSnakeCase }) {
@@ -48,6 +57,34 @@ export function ArticleCard({ article }: { article: ArticleWithSnakeCase }) {
       }
     }
   };
+
+  const handleReaction = async (e: React.MouseEvent, isLike: boolean) => {
+    e.preventDefault(); // Prevent navigating to the article
+
+    if (!user) {
+      setShowAuthDialog(true);
+      return;
+    }
+
+    await apiRequest("POST", `/api/articles/${article.id}/reactions`, {
+      isLike,
+    });
+    // Invalidate both the article list and this specific article
+    queryClient.invalidateQueries({ queryKey: [`/api/articles`] });
+    queryClient.invalidateQueries({
+      queryKey: [`/api/articles/${article.id}`],
+    });
+  };
+
+  // Use 0 as default if counts are undefined
+  const likes = article.likes || 0;
+  const dislikes = article.dislikes || 0;
+  const views = article.viewCount || 0;
+  const commentCount = article._count?.comments || 0;
+
+  // Check if user has liked or disliked
+  const userLiked = article.userReaction === true;
+  const userDisliked = article.userReaction === false;
 
   return (
     <>
@@ -84,19 +121,28 @@ export function ArticleCard({ article }: { article: ArticleWithSnakeCase }) {
         </CardContent>
 
         <CardFooter>
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm">
-              <ThumbsUp className="h-4 w-4 mr-2" />
-              Like
-            </Button>
-            <Button variant="ghost" size="sm">
-              <ThumbsDown className="h-4 w-4 mr-2" />
-              Dislike
-            </Button>
-            <Button variant="ghost" size="sm">
-              <MessageSquare className="h-4 w-4 mr-2" />
-              Comment
-            </Button>
+          <div className="flex items-center gap-5">
+            <div className="flex items-center text-muted-foreground">
+              <Eye className="h-4 w-4 mr-1" />
+              <span className="text-sm">{views}</span>
+            </div>
+
+            <div className="flex items-center text-muted-foreground">
+              <ThumbsUp className="h-4 w-4 mr-1" />
+              <span className="text-sm">{likes}</span>
+            </div>
+
+            <div className="flex items-center text-muted-foreground">
+              <ThumbsDown className="h-4 w-4 mr-1" />
+              <span className="text-sm">{dislikes}</span>
+            </div>
+
+            <Link href={`/articles/${article.id}#comments`}>
+              <div className="flex items-center text-muted-foreground hover:text-primary hover:underline cursor-pointer">
+                <MessageSquare className="h-4 w-4 mr-1" />
+                <span className="text-sm">{commentCount}</span>
+              </div>
+            </Link>
           </div>
         </CardFooter>
       </Card>
