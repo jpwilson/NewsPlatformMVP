@@ -1,6 +1,12 @@
 import { useForm } from "react-hook-form";
 import { insertChannelSchema, type InsertChannel } from "@shared/schema";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,12 +16,23 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Channel } from "@shared/schema";
 
 export default function CreateChannel() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+
+  // Fetch user's existing channels to check against limit
+  const { data: userChannels } = useQuery<Channel[]>({
+    queryKey: ["/api/channels"],
+    select: (channels) => channels.filter((c) => c.userId === user?.id),
+    enabled: !!user,
+  });
+
+  const remainingChannels = userChannels ? 10 - userChannels.length : 10;
+  const isAtLimit = remainingChannels <= 0;
 
   const form = useForm<InsertChannel>({
     defaultValues: {
@@ -68,7 +85,7 @@ export default function CreateChannel() {
 
       const channelData = {
         ...data,
-        userId: user.id
+        userId: user.id,
       };
 
       console.log("Submitting channel data:", channelData);
@@ -85,8 +102,28 @@ export default function CreateChannel() {
       <div className="container mx-auto p-4 lg:p-8 max-w-2xl">
         <h1 className="text-4xl font-bold mb-8">Create Channel</h1>
 
+        {userChannels && (
+          <div
+            className={`mb-6 p-4 rounded-md ${
+              isAtLimit
+                ? "bg-destructive/15"
+                : remainingChannels <= 2
+                ? "bg-amber-500/15"
+                : ""
+            }`}
+          >
+            <p className="text-sm">
+              {isAtLimit
+                ? "You've reached the maximum limit of 10 channels. Please delete an existing channel before creating a new one."
+                : `You can create ${remainingChannels} more channel${
+                    remainingChannels === 1 ? "" : "s"
+                  } (limit: 10).`}
+            </p>
+          </div>
+        )}
+
         <Form {...form}>
-          <form 
+          <form
             onSubmit={(e) => {
               e.preventDefault();
               form.handleSubmit(onSubmit)(e);
@@ -119,10 +156,10 @@ export default function CreateChannel() {
               )}
             />
 
-            <Button 
+            <Button
               type="submit"
               className="w-full"
-              disabled={createChannelMutation.isPending}
+              disabled={createChannelMutation.isPending || isAtLimit}
             >
               {createChannelMutation.isPending ? (
                 <>

@@ -37,6 +37,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Parse and validate the incoming data with the insert schema
       const channelData = insertChannelSchema.parse(req.body);
       
+      // Check if user has reached the maximum number of channels (10)
+      const { data: existingChannels, error: countError } = await supabase
+        .from("channels")
+        .select("id")
+        .eq("user_id", req.user.id);
+      
+      if (countError) throw countError;
+      
+      if (existingChannels && existingChannels.length >= 10) {
+        return res.status(400).json({ 
+          message: "Maximum limit reached. You cannot create more than 10 channels."
+        });
+      }
+      
       console.log("Received channel data:", {
         ...channelData,
         userId: req.user.id
