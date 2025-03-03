@@ -7,7 +7,10 @@ import { relations } from "drizzle-orm";
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   username: text('username').notNull().unique(),
-  password: text('password').notNull()
+  password: text('password').notNull(),
+  description: text('description'),
+  supabase_uid: text('supabase_uid'),
+  created_at: timestamp('created_at').defaultNow()
 });
 
 export const channels = pgTable('channels', {

@@ -24,6 +24,7 @@ import { Loader2 } from "lucide-react";
 // Extended User type to include created_at
 type ExtendedUser = User & {
   created_at?: string | null;
+  description?: string | null;
 };
 
 // Helper function to format date safely
@@ -73,18 +74,20 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-background">
       <NavigationBar />
       <div className="container max-w-4xl mx-auto py-8 px-4">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Profile</h1>
-          <Link href="/channels/new">
-            <Button>Create Channel</Button>
-          </Link>
-        </div>
+        {/* User Header Section */}
+        <h1 className="text-3xl font-bold mb-2">{user.username}</h1>
+        <p className="text-muted-foreground mb-6">
+          Member since{" "}
+          {(user as ExtendedUser).created_at
+            ? formatDate((user as ExtendedUser).created_at)
+            : "Date not available"}
+        </p>
 
         <div className="grid gap-6">
           {/* User Info Card */}
           <Card>
             <CardHeader>
-              <CardTitle>User Information</CardTitle>
+              <CardTitle>Info</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -96,12 +99,11 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex flex-col">
                   <span className="text-sm text-muted-foreground">
-                    Member Since
+                    Description
                   </span>
                   <span className="font-medium">
-                    {(user as any).created_at
-                      ? formatDate((user as any).created_at)
-                      : "Date not available"}
+                    {(user as ExtendedUser).description ||
+                      "No description provided"}
                   </span>
                 </div>
                 <div className="flex flex-col">
@@ -112,16 +114,20 @@ export default function ProfilePage() {
                     {ownedChannels?.length || 0}
                   </span>
                 </div>
-                {/* Would add more user info here when available */}
               </div>
             </CardContent>
           </Card>
 
           {/* My Channels Card */}
           <Card>
-            <CardHeader>
-              <CardTitle>My Channels</CardTitle>
-              <CardDescription>Channels you have created</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>My Channels</CardTitle>
+                <CardDescription>Channels you have created</CardDescription>
+              </div>
+              <Link href="/channels/new">
+                <Button>Create Another Channel</Button>
+              </Link>
             </CardHeader>
             <CardContent>
               {!ownedChannels?.length ? (
