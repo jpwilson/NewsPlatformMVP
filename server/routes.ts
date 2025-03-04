@@ -146,10 +146,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId: req.user.id
       });
       
+      // Create the article
       const article = await storage.createArticle({
         ...articleData,
         userId: req.user.id
       });
+      
+      // If a location was selected, update the article with the locationId
+      if (articleData.locationId) {
+        const { error: locationError } = await supabase
+          .from("articles")
+          .update({ location_id: articleData.locationId })
+          .eq("id", article.id);
+          
+        if (locationError) {
+          console.error("Error updating article location:", locationError);
+        }
+      }
+      
+      // If categories were selected, add them to the article_categories junction table
+      if (articleData.categoryId) {
+        const { error: categoryError } = await supabase
+          .from("article_categories")
+          .insert({
+            article_id: article.id,
+            category_id: articleData.categoryId,
+            is_primary: true
+          });
+          
+        if (categoryError) {
+          console.error("Error adding article category:", categoryError);
+        }
+      }
       
       res.json(article);
     } catch (error) {
@@ -575,6 +603,92 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Get categories
+  app.get("/api/categories", async (req, res) => {
+    try {
+      // Fetch all categories from the database
+      const { data: categories, error } = await supabase
+        .from("categories")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      
+      // Transform into a hierarchical structure
+      const categoryMap = new Map();
+      const rootCategories = [];
+      
+      // First pass: create all category objects and store in map
+      categories.forEach(category => {
+        categoryMap.set(category.id, { ...category, children: [] });
+      });
+      
+      // Second pass: build the hierarchy
+      categories.forEach(category => {
+        const categoryWithChildren = categoryMap.get(category.id);
+        
+        if (category.parent_id === null) {
+          // This is a root category
+          rootCategories.push(categoryWithChildren);
+        } else {
+          // This is a child category, add to its parent's children array
+          const parent = categoryMap.get(category.parent_id);
+          if (parent) {
+            parent.children.push(categoryWithChildren);
+          }
+        }
+      });
+      
+      res.json(rootCategories);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      res.status(500).json({ message: "Failed to fetch categories" });
+    }
+  });
+
+  // Get locations
+  app.get("/api/locations", async (req, res) => {
+    try {
+      // Fetch all locations from the database
+      const { data: locations, error } = await supabase
+        .from("locations")
+        .select("*")
+        .order("name");
+      
+      if (error) throw error;
+      
+      // Transform into a hierarchical structure
+      const locationMap = new Map();
+      const rootLocations = [];
+      
+      // First pass: create all location objects and store in map
+      locations.forEach(location => {
+        locationMap.set(location.id, { ...location, children: [] });
+      });
+      
+      // Second pass: build the hierarchy
+      locations.forEach(location => {
+        const locationWithChildren = locationMap.get(location.id);
+        
+        if (location.parent_id === null) {
+          // This is a root location
+          rootLocations.push(locationWithChildren);
+        } else {
+          // This is a child location, add to its parent's children array
+          const parent = locationMap.get(location.parent_id);
+          if (parent) {
+            parent.children.push(locationWithChildren);
+          }
+        }
+      });
+      
+      res.json(rootLocations);
+    } catch (error) {
+      console.error("Error fetching locations:", error);
+      res.status(500).json({ message: "Failed to fetch locations" });
     }
   });
 
