@@ -46,7 +46,7 @@ export const storage: IStorage = {
     supabase_uid?: string;
   }): Promise<User> {
     // Check if username already exists
-    const existingUser = await getUserByUsername(username);
+    const existingUser = await this.getUserByUsername(username);
     if (existingUser) {
       throw new Error('Username already exists');
     }
@@ -73,6 +73,22 @@ export const storage: IStorage = {
     }
 
     return data as User;
+  },
+  
+  async updateUser(userId: number, updates: { description?: string }): Promise<User> {
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', userId)
+      .select('*')
+      .single();
+
+    if (error) {
+      console.error("Error updating user:", error);
+      throw new Error(`Failed to update user: ${error.message}`);
+    }
+
+    return data;
   },
   
   // Channels

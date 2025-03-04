@@ -21,6 +21,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | null>;
   getUserByUsername(username: string): Promise<User | null>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, update: Partial<User>): Promise<User>;
   createChannel(channel: InsertChannel): Promise<Channel>;
   getChannel(id: number): Promise<Channel | null>;
   listChannels(): Promise<Channel[]>;
@@ -79,6 +80,14 @@ export class MemStorage implements IStorage {
     const newUser = { ...user, id };
     this.users.set(id, newUser);
     return newUser;
+  }
+
+  async updateUser(id: number, update: Partial<User>): Promise<User> {
+    const user = this.users.get(id);
+    if (!user) throw new Error("User not found");
+    const updatedUser = { ...user, ...update };
+    this.users.set(id, updatedUser);
+    return updatedUser;
   }
 
   async createChannel(channel: InsertChannel): Promise<Channel> {

@@ -2,9 +2,11 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { storage } from "./storage-supabase";
-import { insertArticleSchema, insertCommentSchema } from "@shared/schema";
+import { insertArticleSchema, insertCommentSchema, User } from "@shared/schema";
 import { z } from "zod";
 import { supabase } from "./supabase";
+import passport from "passport";
+import { isDev } from "./constants";
 
 declare global {
   namespace Express {
@@ -567,27 +569,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user information by ID
   app.get("/api/users/:id", async (req, res) => {
     try {
-      const userId = parseInt(req.params.id);
-      console.log(`Getting user with ID: ${userId}`);
-      
-      // Use Supabase directly for simplicity
-      const { data: user, error } = await supabase
-        .from("users")
-        .select("id, username, supabase_uid")
-        .eq("id", userId)
-        .single();
-      
-      console.log(`User data retrieved:`, user, `Error:`, error);
-      
-      if (error || !user) {
-        console.log(`User not found for ID: ${userId}`);
-        return res.status(404).json({ error: "User not found" });
-      }
-      
+      const user = await storage.getUser(parseInt(req.params.id));
+      if (!user) return res.status(404).json({ message: "User not found" });
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
-      res.status(500).json({ error: "Failed to fetch user" });
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Update user information by ID
+  app.patch("/api/users/:id", async (req, res) => {
+    try {
+      if (!req.isAuthenticated()) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      
+      const userId = parseInt(req.params.id);
+      
+      // Check if the authenticated user is trying to update their own profile
+      if (req.user.id !== userId) {
+        return res.status(403).json({ message: "Not authorized to update this user" });
+      }
+      
+      const updates = req.body;
+      const updatedUser = await storage.updateUser(userId, updates);
+      
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ message: "Failed to update user" });
     }
   });
 
