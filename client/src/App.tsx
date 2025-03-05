@@ -13,12 +13,14 @@ import CreateChannel from "@/pages/create-channel";
 import ChannelPage from "@/pages/channel-page"; // Add this import
 import AuthCallback from "./pages/auth-callback";
 import ProfilePage from "./pages/profile-page";
+import EditArticle from "@/pages/edit-article";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={HomePage} />
       <ProtectedRoute path="/articles/new" component={CreateArticle} />
+      <ProtectedRoute path="/articles/:id/edit" component={EditArticle} />
       <ProtectedRoute path="/channels/new" component={CreateChannel} />
       <Route path="/articles/:id" component={ArticlePage} />
       <Route path="/channels/:id" component={ChannelPage} />{" "}

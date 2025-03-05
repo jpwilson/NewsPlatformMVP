@@ -25,6 +25,8 @@ import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArticleWithSnakeCase } from "@/types/article";
 
 type SortField = "title" | "createdAt" | "category";
 type SortOrder = "asc" | "desc";
@@ -45,12 +47,6 @@ const formatDate = (dateString: string | Date | null | undefined): string => {
   }
 };
 
-// Define a more flexible type for article that accommodates both camelCase and snake_case
-type ArticleWithSnakeCase = Article & {
-  created_at?: string | Date;
-  channel_id?: number;
-};
-
 export default function ChannelPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
@@ -58,6 +54,7 @@ export default function ChannelPage() {
   const { toast } = useToast();
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  const [activeTab, setActiveTab] = useState("published");
 
   // Fetch current channel
   const { data: channel, isLoading: loadingChannel } =
@@ -71,6 +68,17 @@ export default function ChannelPage() {
   >({
     queryKey: [`/api/channels/${id}/articles`],
     select: (data) => data || [], // Ensure we always have an array
+  });
+
+  // Fetch draft articles for this channel (only for channel owner)
+  const { data: drafts, isLoading: loadingDrafts } = useQuery<
+    ArticleWithSnakeCase[]
+  >({
+    queryKey: [`/api/channels/${id}/drafts`],
+    select: (data) => data || [], // Ensure we always have an array
+    enabled:
+      !!user &&
+      !!(channel?.user_id === user?.id || channel?.userId === user?.id),
   });
 
   // Fetch all channels owned by the current user
@@ -115,6 +123,7 @@ export default function ChannelPage() {
     setLocation(`/channels/${channelId}`);
   };
 
+  // Sort published articles
   const sortedArticles = articles?.slice().sort((a, b) => {
     const multiplier = sortOrder === "asc" ? 1 : -1;
     if (sortField === "createdAt") {
@@ -131,6 +140,35 @@ export default function ChannelPage() {
     const aValue = a[sortField] || "";
     const bValue = b[sortField] || "";
     return multiplier * (aValue < bValue ? -1 : 1);
+  });
+
+  // Sort draft articles
+  const sortedDrafts = drafts?.slice().sort((a, b) => {
+    // Get the correct creation date from either camelCase or snake_case property
+    const dateA = a.createdAt || a.created_at;
+    const dateB = b.createdAt || b.created_at;
+
+    // Sort by the selected field
+    switch (sortField) {
+      case "title":
+        if (sortOrder === "asc") {
+          return a.title.localeCompare(b.title);
+        }
+        return b.title.localeCompare(a.title);
+      case "category":
+        if (sortOrder === "asc") {
+          return a.category.localeCompare(b.category);
+        }
+        return b.category.localeCompare(a.category);
+      case "createdAt":
+      default:
+        if (sortOrder === "asc") {
+          return (
+            new Date(dateA || 0).getTime() - new Date(dateB || 0).getTime()
+          );
+        }
+        return new Date(dateB || 0).getTime() - new Date(dateA || 0).getTime();
+    }
   });
 
   const subscribeMutation = useMutation({
@@ -265,70 +303,160 @@ export default function ChannelPage() {
               </div>
             </div>
 
-            <h2 className="text-xl font-semibold mb-4">Articles</h2>
-            <div className="rounded-lg border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("title")}
-                      >
-                        Title
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("category")}
-                      >
-                        Category
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleSort("createdAt")}
-                      >
-                        Date
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedArticles?.map((article) => (
-                    <TableRow key={article.id}>
-                      <TableCell>
-                        <a
-                          href={`/articles/${article.id}`}
-                          className="hover:underline text-primary"
-                        >
-                          {article.title}
-                        </a>
-                      </TableCell>
-                      <TableCell>{article.category}</TableCell>
-                      <TableCell>
-                        {formatDate(article.createdAt || article.created_at)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!sortedArticles?.length && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={3}
-                        className="text-center text-muted-foreground"
-                      >
-                        No articles published yet
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Articles</h2>
+              {isOwner && (
+                <Link href="/articles/new">
+                  <Button variant="default">
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    New Article
+                  </Button>
+                </Link>
+              )}
             </div>
+
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              className="w-full"
+            >
+              <TabsList>
+                <TabsTrigger value="published">Published</TabsTrigger>
+                {isOwner && <TabsTrigger value="drafts">Drafts</TabsTrigger>}
+              </TabsList>
+
+              <TabsContent
+                value="published"
+                className="rounded-lg border bg-card mt-2"
+              >
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        <Button
+                          variant="ghost"
+                          onClick={() => handleSort("title")}
+                        >
+                          Title
+                          <ArrowUpDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button
+                          variant="ghost"
+                          onClick={() => handleSort("category")}
+                        >
+                          Category
+                          <ArrowUpDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </TableHead>
+                      <TableHead>
+                        <Button
+                          variant="ghost"
+                          onClick={() => handleSort("createdAt")}
+                        >
+                          Date
+                          <ArrowUpDown className="ml-2 h-4 w-4" />
+                        </Button>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedArticles?.map((article) => (
+                      <TableRow key={article.id}>
+                        <TableCell>
+                          <a
+                            href={`/articles/${article.id}`}
+                            className="hover:underline text-primary"
+                          >
+                            {article.title}
+                          </a>
+                        </TableCell>
+                        <TableCell>{article.category}</TableCell>
+                        <TableCell>
+                          {formatDate(article.createdAt || article.created_at)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!sortedArticles?.length && (
+                      <TableRow>
+                        <TableCell colSpan={3} className="h-24 text-center">
+                          No articles published yet
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TabsContent>
+
+              {isOwner && (
+                <TabsContent
+                  value="drafts"
+                  className="rounded-lg border bg-card mt-2"
+                >
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>
+                          <Button
+                            variant="ghost"
+                            onClick={() => handleSort("title")}
+                          >
+                            Title
+                            <ArrowUpDown className="ml-2 h-4 w-4" />
+                          </Button>
+                        </TableHead>
+                        <TableHead>
+                          <Button
+                            variant="ghost"
+                            onClick={() => handleSort("category")}
+                          >
+                            Category
+                            <ArrowUpDown className="ml-2 h-4 w-4" />
+                          </Button>
+                        </TableHead>
+                        <TableHead>
+                          <Button
+                            variant="ghost"
+                            onClick={() => handleSort("createdAt")}
+                          >
+                            Date
+                            <ArrowUpDown className="ml-2 h-4 w-4" />
+                          </Button>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedDrafts?.map((article) => (
+                        <TableRow key={article.id}>
+                          <TableCell>
+                            <a
+                              href={`/articles/${article.id}`}
+                              className="hover:underline text-primary"
+                            >
+                              {article.title}
+                            </a>
+                          </TableCell>
+                          <TableCell>{article.category}</TableCell>
+                          <TableCell>
+                            {formatDate(
+                              article.createdAt || article.created_at
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {!sortedDrafts?.length && (
+                        <TableRow>
+                          <TableCell colSpan={3} className="h-24 text-center">
+                            No draft articles
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TabsContent>
+              )}
+            </Tabs>
           </div>
 
           <div className="space-y-6">

@@ -1,54 +1,99 @@
 import { useQuery } from "@tanstack/react-query";
-import { Article } from "@shared/schema";
+import { Article, Channel } from "@shared/schema";
 import { NavigationBar } from "@/components/navigation-bar";
 import { CommentSection } from "@/components/comment-section";
 import { useParams, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
+import { ArticleWithSnakeCase } from "@/types/article";
 import {
   ThumbsUp,
   ThumbsDown,
   Loader2,
   Eye,
   MessageSquare,
+  Edit,
+  Trash2,
+  ExternalLink,
+  FileDown,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { formatDate } from "@/lib/date-utils";
 import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
 import {
   AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogCancel,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { Link } from "wouter";
 
-// Define a more flexible type for article that accommodates both camelCase and snake_case
-type ArticleWithSnakeCase = Article & {
-  created_at?: string | Date;
-  channel_id?: number;
-  channel?: { id: number; name: string };
-  likes?: number;
-  dislikes?: number;
-  viewCount?: number;
-  userReaction?: boolean | null;
-  _count?: {
-    comments?: number;
-  };
-};
+// Helper function to capitalize the first letter of a string
+function capitalizeFirstLetter(string: string) {
+  return string.charAt(0).toUpperCase() + string.slice(1);
+}
 
 export default function ArticlePage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [showAuthDialog, setShowAuthDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { toast } = useToast();
+
+  // Add edit mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editableTitle, setEditableTitle] = useState("");
+  const [editableContent, setEditableContent] = useState("");
+  const [editableCategory, setEditableCategory] = useState("");
+  const [editableLocation, setEditableLocation] = useState("");
 
   const { data: article, isLoading } = useQuery<ArticleWithSnakeCase>({
     queryKey: [`/api/articles/${id}`],
   });
+
+  // Fetch user's channels if needed for editing
+  const { data: channels } = useQuery<Channel[]>({
+    queryKey: ["/api/user/channels"],
+    enabled: !!user && !!isEditing,
+  });
+
+  // Check if the current user is the article owner
+  const isOwner =
+    !!user &&
+    !!article &&
+    (article.userId === user.id || article.user_id === user.id);
+
+  // Log ownership debugging info to console
+  useEffect(() => {
+    if (article && user) {
+      console.log("Article owner check:");
+      console.log("- Article userId:", article.userId || article.user_id);
+      console.log("- Current user id:", user.id);
+      console.log("- Is owner:", isOwner);
+    }
+  }, [article, user, isOwner]);
+
+  // Initialize editable fields when article data is loaded
+  useEffect(() => {
+    if (article) {
+      setEditableTitle(article.title);
+      setEditableContent(article.content);
+      setEditableCategory(article.category || "");
+      setEditableLocation(article.location || "");
+    }
+  }, [article]);
+
+  // Check if article is in draft state
+  const isDraft = article?.status === "draft" || article?.published === false;
 
   // Increment view count when the article is loaded
   useEffect(() => {
@@ -96,6 +141,106 @@ export default function ArticlePage() {
     }
   };
 
+  // Mutation for toggling article publish status
+  const togglePublishMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest(
+        "POST",
+        `/api/articles/${id}/toggle-status`
+      );
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      toast({
+        title: `Article ${data.published ? "published" : "moved to drafts"}`,
+        description: `The article has been ${
+          data.published ? "published" : "moved to your drafts"
+        }.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to change article status.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // New mutation for updating the article
+  const updateArticleMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("PATCH", `/api/articles/${id}`, {
+        title: editableTitle,
+        content: editableContent,
+        category: editableCategory,
+        location: editableLocation,
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/articles/${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      setIsEditing(false);
+      toast({
+        title: "Article updated",
+        description: "Your article has been updated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update the article.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation for deleting the article
+  const deleteArticleMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", `/api/articles/${id}`);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      setLocation("/");
+      toast({
+        title: "Article deleted",
+        description: "The article has been deleted.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete the article.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDelete = () => {
+    setShowDeleteDialog(false);
+    deleteArticleMutation.mutate();
+  };
+
+  const handleSaveChanges = () => {
+    updateArticleMutation.mutate();
+  };
+
+  const handleCancelEdit = () => {
+    // Reset to original values
+    if (article) {
+      setEditableTitle(article.title);
+      setEditableContent(article.content);
+      setEditableCategory(article.category || "");
+      setEditableLocation(article.location || "");
+    }
+    setIsEditing(false);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -135,12 +280,140 @@ export default function ArticlePage() {
 
         <article className="container mx-auto p-4 lg:p-8 max-w-4xl">
           <header className="mb-8">
-            <h1 className="text-4xl font-bold mb-4">{article.title}</h1>
+            <div className="flex justify-between items-start">
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editableTitle}
+                  onChange={(e) => setEditableTitle(e.target.value)}
+                  className="text-4xl font-bold mb-4 w-full p-2 border border-input bg-background rounded-md"
+                />
+              ) : (
+                <h1 className="text-4xl font-bold mb-4">{article.title}</h1>
+              )}
+
+              {/* Owner actions */}
+              {isOwner && (
+                <div className="flex gap-2">
+                  {isEditing ? (
+                    <>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleSaveChanges}
+                        disabled={updateArticleMutation.isPending}
+                      >
+                        {updateArticleMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
+                        Save
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCancelEdit}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditing(true)}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    </>
+                  )}
+
+                  {!isEditing && (
+                    <>
+                      <Button
+                        variant={isDraft ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => togglePublishMutation.mutate()}
+                        disabled={togglePublishMutation.isPending}
+                      >
+                        {togglePublishMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : isDraft ? (
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                        ) : (
+                          <FileDown className="h-4 w-4 mr-2" />
+                        )}
+                        {isDraft ? "Publish" : "Move to Drafts"}
+                      </Button>
+
+                      <AlertDialog
+                        open={showDeleteDialog}
+                        onOpenChange={setShowDeleteDialog}
+                      >
+                        <AlertDialogTrigger asChild>
+                          <Button variant="outline" size="sm">
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Article</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete this article? This
+                              action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDelete}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Draft indicator */}
+            {isDraft && (
+              <div className="inline-block mb-4 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100 px-2 py-1 rounded text-sm font-medium">
+                Draft
+              </div>
+            )}
+
             <div className="flex flex-col gap-2 text-muted-foreground">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <span>
-                  {formatDate(article.created_at || article.createdAt)}
+                  <span className="font-medium">Created:</span>{" "}
+                  {formatDate(article.created_at || article.createdAt, true)}
                 </span>
+                {(article.publishedAt || article.published_at) && (
+                  <span>
+                    <span className="font-medium">Published:</span>{" "}
+                    {formatDate(
+                      article.publishedAt || article.published_at,
+                      true
+                    )}
+                  </span>
+                )}
+                {(article.lastEdited || article.last_edited) &&
+                  article.lastEdited !== article.createdAt && (
+                    <span>
+                      <span className="font-medium">Last edited:</span>{" "}
+                      {formatDate(
+                        article.lastEdited || article.last_edited,
+                        true
+                      )}
+                    </span>
+                  )}
                 {article.location && <span>📍 {article.location}</span>}
                 <span>📂 {article.category}</span>
               </div>
@@ -176,10 +449,81 @@ export default function ArticlePage() {
             </div>
           </header>
 
-          <div
-            className="prose prose-lg max-w-none mb-8"
-            dangerouslySetInnerHTML={{ __html: article.content }}
-          />
+          {/* Article metadata */}
+          <div className="flex items-center text-sm text-muted-foreground space-x-4 mb-6">
+            <div className="flex items-center">
+              <span className="font-semibold">
+                {article.channel?.name || "Unknown channel"}
+              </span>
+            </div>
+            <span>•</span>
+            <div>
+              {isEditing ? (
+                <select
+                  value={editableCategory}
+                  onChange={(e) => setEditableCategory(e.target.value)}
+                  className="px-2 py-1 rounded-md border border-input bg-background"
+                >
+                  <option value="">Select category</option>
+                  <option value="politics">Politics</option>
+                  <option value="technology">Technology</option>
+                  <option value="sports">Sports</option>
+                  <option value="health">Health</option>
+                  <option value="entertainment">Entertainment</option>
+                  <option value="business">Business</option>
+                  <option value="science">Science</option>
+                  <option value="environment">Environment</option>
+                  <option value="education">Education</option>
+                  <option value="other">Other</option>
+                </select>
+              ) : (
+                <span>
+                  {capitalizeFirstLetter(article.category || "Uncategorized")}
+                </span>
+              )}
+            </div>
+            <span>•</span>
+            <div>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editableLocation}
+                  onChange={(e) => setEditableLocation(e.target.value)}
+                  placeholder="Location (optional)"
+                  className="px-2 py-1 rounded-md border border-input bg-background w-36"
+                />
+              ) : (
+                <span>{article.location || "Global"}</span>
+              )}
+            </div>
+            <span>•</span>
+            <div>Created: {formatDate(article.createdAt)}</div>
+            {article.publishedAt && (
+              <>
+                <span>•</span>
+                <div>Published: {formatDate(article.publishedAt, true)}</div>
+              </>
+            )}
+            {article.lastEdited && (
+              <>
+                <span>•</span>
+                <div>Last edited: {formatDate(article.lastEdited, true)}</div>
+              </>
+            )}
+          </div>
+
+          {/* Article content */}
+          <div className="prose prose-lg max-w-none">
+            {isEditing ? (
+              <textarea
+                value={editableContent}
+                onChange={(e) => setEditableContent(e.target.value)}
+                className="w-full min-h-[500px] p-4 border border-input bg-background rounded-md"
+              />
+            ) : (
+              <div dangerouslySetInnerHTML={{ __html: article.content }} />
+            )}
+          </div>
 
           {/* Interactive like/dislike buttons at the bottom */}
           <div className="flex items-center gap-4 mb-8 border-t pt-4">

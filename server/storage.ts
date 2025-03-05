@@ -29,6 +29,7 @@ export interface IStorage {
   getArticle(id: number): Promise<Article | null>;
   listArticles(): Promise<Article[]>;
   updateArticle(id: number, update: Partial<Article>): Promise<Article>;
+  deleteArticle(id: number): Promise<void>;
   createComment(comment: InsertComment): Promise<Comment>;
   listComments(articleId: number): Promise<Comment[]>;
   createReaction(reaction: InsertReaction): Promise<Reaction>;
@@ -130,6 +131,11 @@ export class MemStorage implements IStorage {
     const updatedArticle = { ...article, ...update };
     this.articles.set(id, updatedArticle);
     return updatedArticle;
+  }
+
+  async deleteArticle(id: number): Promise<void> {
+    if (!this.articles.has(id)) throw new Error("Article not found");
+    this.articles.delete(id);
   }
 
   async createComment(comment: InsertComment): Promise<Comment> {

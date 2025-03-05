@@ -117,11 +117,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       
-      // Fetch articles for this channel
+      // Fetch articles for this channel that are published
       const { data: articles, error } = await supabase
         .from("articles")
         .select("*")
         .eq("channel_id", id)
+        .eq("published", true)  // Only return published articles
         .order("created_at", { ascending: false });
       
       if (error) throw error;
@@ -130,6 +131,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching channel articles:", error);
       res.status(500).json({ error: "Failed to fetch channel articles" });
+    }
+  });
+
+  // Fetch draft articles by channel ID
+  app.get("/api/channels/:id/drafts", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const channelId = parseInt(req.params.id);
+      
+      // Check if the user has permission to view drafts for this channel
+      const { data: channel, error: channelError } = await supabase
+        .from("channels")
+        .select("user_id")
+        .eq("id", channelId)
+        .single();
+        
+      if (channelError) throw channelError;
+      if (!channel) return res.status(404).json({ error: "Channel not found" });
+      
+      // Only the channel owner can see drafts
+      if (channel.user_id !== req.user!.id) {
+        return res.status(403).json({ error: "You don't have permission to view drafts for this channel" });
+      }
+      
+      // Fetch draft articles for this channel
+      const { data: articles, error } = await supabase
+        .from("articles")
+        .select("*")
+        .eq("channel_id", channelId)
+        .eq("status", "draft");
+        
+      if (error) throw error;
+      
+      res.json(articles || []);
+    } catch (error) {
+      console.error("Error fetching channel drafts:", error);
+      res.status(500).json({ error: "Failed to fetch channel drafts" });
     }
   });
 
@@ -193,10 +231,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/articles", async (req, res) => {
     try {
-      // First, fetch the articles
+      // First, fetch the articles (only published ones)
       const { data: articles, error } = await supabase
         .from("articles")
         .select("*")
+        .eq("published", true)  // Only return published articles
         .order("created_at", { ascending: false });
       
       if (error) throw error;
@@ -352,14 +391,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/articles/:id", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const article = await storage.getArticle(parseInt(req.params.id));
-    if (!article) return res.sendStatus(404);
-    if (article.userId !== req.user.id) return res.sendStatus(403);
-    const updatedArticle = await storage.updateArticle(
-      parseInt(req.params.id),
-      req.body
-    );
-    res.json(updatedArticle);
+    try {
+      const article = await storage.getArticle(parseInt(req.params.id));
+      if (!article) return res.sendStatus(404);
+      if (article.userId !== req.user!.id) return res.sendStatus(403);
+      
+      // Add lastEdited timestamp to the update
+      const updatedArticle = await storage.updateArticle(
+        parseInt(req.params.id),
+        {
+          ...req.body,
+          lastEdited: new Date()
+        }
+      );
+      res.json(updatedArticle);
+    } catch (error) {
+      console.error("Error updating article:", error);
+      res.status(500).json({ error: "Failed to update article" });
+    }
+  });
+
+  // Delete an article
+  app.delete("/api/articles/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const article = await storage.getArticle(parseInt(req.params.id));
+      if (!article) return res.sendStatus(404);
+      if (article.userId !== req.user!.id) return res.sendStatus(403);
+      
+      await storage.deleteArticle(parseInt(req.params.id));
+      res.sendStatus(204); // No content
+    } catch (error) {
+      console.error("Error deleting article:", error);
+      res.status(500).json({ error: "Failed to delete article" });
+    }
+  });
+
+  // Toggle article publish status
+  app.post("/api/articles/:id/toggle-status", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    try {
+      const article = await storage.getArticle(parseInt(req.params.id));
+      if (!article) return res.sendStatus(404);
+      if (article.userId !== req.user!.id) return res.sendStatus(403);
+      
+      const newStatus = article.status === 'published' ? 'draft' : 'published';
+      const published = newStatus === 'published';
+      
+      const updatedArticle = await storage.updateArticle(
+        parseInt(req.params.id),
+        { 
+          status: newStatus,
+          published,
+          publishedAt: published ? new Date() : article.publishedAt
+        }
+      );
+      
+      res.json(updatedArticle);
+    } catch (error) {
+      console.error("Error toggling article status:", error);
+      res.status(500).json({ error: "Failed to update article status" });
+    }
   });
 
   // Comments

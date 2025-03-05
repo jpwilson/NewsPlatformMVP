@@ -126,12 +126,22 @@ export const storage: IStorage = {
       .set(update)
       .where(eq(articles.id, id))
       .returning();
-      
-    if (result.length === 0) {
+    
+    if (!result.length) {
       throw new Error("Article not found");
     }
     
     return result[0];
+  },
+  
+  async deleteArticle(id: number): Promise<void> {
+    const result = await db.delete(articles)
+      .where(eq(articles.id, id))
+      .returning();
+      
+    if (!result.length) {
+      throw new Error("Article not found");
+    }
   },
   
   // Comments

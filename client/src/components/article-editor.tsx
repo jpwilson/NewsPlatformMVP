@@ -3,7 +3,9 @@ import {
   insertArticleSchema,
   type InsertArticle,
   Channel,
+  Article,
 } from "@shared/schema";
+import { ArticleWithSnakeCase } from "@/types/article";
 import {
   Form,
   FormControl,
@@ -55,11 +57,22 @@ interface LocationWithChildren {
   children?: LocationWithChildren[];
 }
 
-export function ArticleEditor({ channels }: { channels: Channel[] }) {
+export function ArticleEditor({
+  channels,
+  existingArticle,
+}: {
+  channels: Channel[];
+  existingArticle?: ArticleWithSnakeCase;
+}) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const [isDraft, setIsDraft] = useState(false);
+  const [isDraft, setIsDraft] = useState(
+    existingArticle
+      ? existingArticle.status === "draft" ||
+          existingArticle.published === false
+      : false
+  );
 
   // Fetch categories from API
   const { data: categories, isLoading: isLoadingCategories } = useQuery<
@@ -77,15 +90,21 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
 
   const form = useForm<InsertArticle>({
     defaultValues: {
-      title: "",
-      content: "",
-      channelId: undefined,
-      category: "Other", // Default category text (required by schema)
-      location: "",
-      locationId: undefined,
-      categoryId: undefined,
-      published: true,
-      status: isDraft ? "draft" : "published",
+      title: existingArticle?.title || "",
+      content: existingArticle?.content || "",
+      channelId:
+        existingArticle?.channelId || existingArticle?.channel_id || undefined,
+      category: existingArticle?.category || "Other", // Default category text (required by schema)
+      location: existingArticle?.location || "",
+      locationId: existingArticle?.locationId || undefined,
+      categoryId: existingArticle?.categoryId || undefined,
+      published: existingArticle ? existingArticle.published !== false : true,
+      status: existingArticle
+        ? existingArticle.status ||
+          (existingArticle.published === false ? "draft" : "published")
+        : isDraft
+        ? "draft"
+        : "published",
     },
     resolver: zodResolver(
       z.object({
@@ -162,7 +181,14 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
     };
 
     console.log("Submitting article with data:", processedData);
-    await createArticleMutation.mutate(processedData);
+
+    if (existingArticle) {
+      // Update existing article
+      await updateArticleMutation.mutate(processedData);
+    } else {
+      // Create new article
+      await createArticleMutation.mutate(processedData);
+    }
   };
 
   const createArticleMutation = useMutation({
@@ -197,6 +223,51 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
       toast({
         title: "Error",
         description: error.message || "Failed to create article",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation for updating an article
+  const updateArticleMutation = useMutation({
+    mutationFn: async (data: InsertArticle) => {
+      console.log("Making API request to update article:", data);
+      const res = await apiRequest(
+        "PATCH",
+        `/api/articles/${existingArticle!.id}`,
+        data
+      );
+      if (!res.ok) {
+        const error = await res.json();
+        console.error("API error:", error);
+        throw new Error(error.message || "Failed to update article");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate the articles query to refresh the list
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/articles/${existingArticle!.id}`],
+      });
+
+      toast({
+        title: "Success",
+        description: isDraft
+          ? "Article saved as draft"
+          : "Article updated successfully",
+      });
+
+      // Navigate to the individual article page
+      setTimeout(() => {
+        window.location.href = `/articles/${data.id}`;
+      }, 1500);
+    },
+    onError: (error: Error) => {
+      console.error("Mutation error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update article",
         variant: "destructive",
       });
     },
@@ -434,13 +505,28 @@ export function ArticleEditor({ channels }: { channels: Channel[] }) {
         <Button
           type="submit"
           className="w-full"
-          disabled={createArticleMutation.isPending}
+          disabled={
+            createArticleMutation.isPending || updateArticleMutation?.isPending
+          }
         >
-          {createArticleMutation.isPending ? (
+          {createArticleMutation.isPending ||
+          updateArticleMutation?.isPending ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              {isDraft ? "Saving..." : "Publishing..."}
+              {existingArticle
+                ? isDraft
+                  ? "Saving..."
+                  : "Updating..."
+                : isDraft
+                ? "Saving..."
+                : "Publishing..."}
             </>
+          ) : existingArticle ? (
+            isDraft ? (
+              "Save Draft"
+            ) : (
+              "Update Article"
+            )
           ) : isDraft ? (
             "Save Draft"
           ) : (
