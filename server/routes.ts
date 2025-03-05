@@ -112,6 +112,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update channel endpoint
+  app.patch("/api/channels/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const { id } = req.params;
+      
+      // First, check if the user is the owner of the channel
+      const { data: channel, error: fetchError } = await supabase
+        .from("channels")
+        .select("*")
+        .eq("id", id)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      if (!channel) {
+        return res.status(404).json({ error: "Channel not found" });
+      }
+      
+      // Check ownership
+      if (channel.user_id !== req.user.id) {
+        return res.status(403).json({ error: "You don't have permission to edit this channel" });
+      }
+      
+      // Update the channel
+      const updateData = req.body;
+      
+      // Prevent updating userId/user_id
+      delete updateData.userId;
+      delete updateData.user_id;
+      
+      const { data: updatedChannel, error: updateError } = await supabase
+        .from("channels")
+        .update(updateData)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (updateError) throw updateError;
+      
+      res.json(updatedChannel);
+    } catch (error) {
+      console.error("Error updating channel:", error);
+      res.status(500).json({ error: "Failed to update channel" });
+    }
+  });
+
   // Fetch articles by channel ID
   app.get("/api/channels/:id/articles", async (req, res) => {
     try {

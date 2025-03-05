@@ -12,8 +12,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2, ArrowUpDown, PlusCircle } from "lucide-react";
-import { useState } from "react";
+import {
+  Loader2,
+  ArrowUpDown,
+  PlusCircle,
+  Pencil,
+  Check,
+  X,
+} from "lucide-react";
+import { useState, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -27,6 +34,10 @@ import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArticleWithSnakeCase } from "@/types/article";
+import { formatDate } from "@/lib/date-utils";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 type SortField = "title" | "createdAt" | "category";
 type SortOrder = "asc" | "desc";
@@ -37,16 +48,6 @@ type ExtendedChannel = Channel & {
   user_id?: number;
 };
 
-// Helper function to format date safely
-const formatDate = (dateString: string | Date | null | undefined): string => {
-  if (!dateString) return "N/A";
-  try {
-    return new Date(dateString).toLocaleDateString();
-  } catch (e) {
-    return "Invalid date";
-  }
-};
-
 export default function ChannelPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
@@ -55,6 +56,10 @@ export default function ChannelPage() {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [activeTab, setActiveTab] = useState("published");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [editedDescription, setEditedDescription] = useState("");
+  const [editedCategory, setEditedCategory] = useState("");
 
   // Fetch current channel
   const { data: channel, isLoading: loadingChannel } =
@@ -109,6 +114,57 @@ export default function ChannelPage() {
   const isOwner = user?.id === (channel?.user_id || channel?.userId);
   const isSubscribed =
     subscriptions?.some((sub: Channel) => sub.id === Number(id)) || false;
+
+  // Initialize edit form fields when channel data is loaded
+  useEffect(() => {
+    if (channel) {
+      setEditedName(channel.name);
+      setEditedDescription(channel.description);
+      setEditedCategory(channel.category || "");
+    }
+  }, [channel]);
+
+  // Update channel mutation
+  const updateChannelMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("PATCH", `/api/channels/${id}`, {
+        name: editedName,
+        description: editedDescription,
+        category: editedCategory || null,
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/channels/${id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+      setIsEditing(false);
+      toast({
+        title: "Channel updated",
+        description: "Your channel has been updated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update the channel.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSaveChanges = () => {
+    updateChannelMutation.mutate();
+  };
+
+  const handleCancelEdit = () => {
+    // Reset to original values
+    if (channel) {
+      setEditedName(channel.name);
+      setEditedDescription(channel.description);
+      setEditedCategory(channel.category || "");
+    }
+    setIsEditing(false);
+  };
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -258,24 +314,66 @@ export default function ChannelPage() {
           <div>
             <div className="flex justify-between items-start mb-8">
               <div>
-                <h1 className="text-4xl font-bold mb-2">{channel.name}</h1>
-                {channel.created_at && (
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Created on {formatDate(channel.created_at)}
-                  </p>
-                )}
-                <p className="text-muted-foreground">{channel.description}</p>
-                {channel.category && (
-                  <div className="mt-2">
-                    <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                      {channel.category}
-                    </span>
+                {isEditing ? (
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="channel-name">Channel Name</Label>
+                      <Input
+                        id="channel-name"
+                        type="text"
+                        value={editedName}
+                        onChange={(e) => setEditedName(e.target.value)}
+                        className="max-w-md"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="channel-description">Description</Label>
+                      <Textarea
+                        id="channel-description"
+                        value={editedDescription}
+                        onChange={(e) => setEditedDescription(e.target.value)}
+                        className="max-w-md"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="channel-category">
+                        Category (optional)
+                      </Label>
+                      <Input
+                        id="channel-category"
+                        type="text"
+                        value={editedCategory}
+                        onChange={(e) => setEditedCategory(e.target.value)}
+                        className="max-w-md"
+                        placeholder="e.g. Technology, Sports, News"
+                      />
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    <h1 className="text-4xl font-bold mb-2">{channel.name}</h1>
+                    {channel.created_at && (
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Created on {formatDate(channel.created_at)}
+                      </p>
+                    )}
+                    <p className="text-muted-foreground">
+                      {channel.description}
+                    </p>
+                    {channel.category && (
+                      <div className="mt-2">
+                        <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                          {channel.category}
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
               <div className="flex gap-2">
-                {isOwner && (
+                {isOwner && !isEditing && (
                   <Link href="/articles/new">
                     <Button variant="default">
                       <PlusCircle className="h-4 w-4 mr-2" />
@@ -283,8 +381,38 @@ export default function ChannelPage() {
                     </Button>
                   </Link>
                 )}
-                {isOwner && <Button variant="outline">Edit Channel</Button>}
-                {!isOwner && user && (
+
+                {isOwner &&
+                  (isEditing ? (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="default"
+                        onClick={handleSaveChanges}
+                        disabled={updateChannelMutation.isPending}
+                      >
+                        {updateChannelMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Check className="h-4 w-4 mr-2" />
+                        )}
+                        Save
+                      </Button>
+                      <Button variant="outline" onClick={handleCancelEdit}>
+                        <X className="h-4 w-4 mr-2" />
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsEditing(true)}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit Channel
+                    </Button>
+                  ))}
+
+                {!isOwner && user && !isEditing && (
                   <Button
                     variant={isSubscribed ? "outline" : "default"}
                     onClick={() =>
@@ -488,6 +616,11 @@ export default function ChannelPage() {
                         }`}
                     </Link>
                   </div>
+                  {channel.created_at && (
+                    <div className="text-sm text-muted-foreground mt-2">
+                      Channel created: {formatDate(channel.created_at)}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
