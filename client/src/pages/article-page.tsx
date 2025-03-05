@@ -202,6 +202,10 @@ export default function ArticlePage() {
   const deleteArticleMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("DELETE", `/api/articles/${id}`);
+      // Don't try to parse JSON for 204 No Content responses
+      if (response.status === 204) {
+        return null; // No content to parse
+      }
       return await response.json();
     },
     onSuccess: () => {
