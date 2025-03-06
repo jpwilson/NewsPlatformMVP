@@ -7,11 +7,33 @@
  */
 export function formatDate(
   dateString: string | Date | null | undefined, 
-  includeTime: boolean = false
+  includeTime: boolean = false,
+  useFriendlyFormat: boolean = true
 ): string {
   if (!dateString) return "N/A";
   try {
     const date = new Date(dateString);
+    
+    if (useFriendlyFormat) {
+      // Format like "Tue, 5 Mar 25"
+      const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const day = date.getDate();
+      const month = date.toLocaleDateString('en-US', { month: 'short' });
+      const year = date.getFullYear().toString().slice(-2);
+      
+      if (includeTime) {
+        const time = date.toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: true 
+        });
+        return `${weekday}, ${day} ${month} ${year} at ${time}`;
+      }
+      
+      return `${weekday}, ${day} ${month} ${year}`;
+    }
+    
+    // Traditional format
     if (includeTime) {
       return date.toLocaleString();
     }

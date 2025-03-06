@@ -11,14 +11,21 @@ import {
 import { Newspaper, LogOut, ChevronDown, PlusCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Channel } from "@shared/schema";
+import { useEffect } from "react";
 
 export function NavigationBar({
   hideAuthButtons = false,
+  selectedChannelId = undefined,
 }: {
   hideAuthButtons?: boolean;
+  selectedChannelId?: string | number;
 }) {
   const { user, logoutMutation } = useAuth();
   const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    console.log("NavigationBar - Selected Channel ID:", selectedChannelId);
+  }, [selectedChannelId]);
 
   // Fetch user's owned channels if the user is logged in
   const { data: userChannels } = useQuery<Channel[]>({
@@ -27,16 +34,41 @@ export function NavigationBar({
     enabled: !!user,
   });
 
+  useEffect(() => {
+    if (userChannels) {
+      console.log(
+        "NavigationBar - User Channels:",
+        userChannels.map((c) => ({ id: c.id, name: c.name }))
+      );
+    }
+  }, [userChannels]);
+
+  // Get the selected channel or default to the first one
+  const selectedChannel =
+    userChannels && selectedChannelId
+      ? userChannels.find(
+          (c) => c.id.toString() === selectedChannelId.toString()
+        )
+      : null;
+
   // Get the user's primary channel (first one they created)
   const primaryChannel =
-    userChannels && userChannels.length > 0 ? userChannels[0] : null;
+    selectedChannel ||
+    (userChannels && userChannels.length > 0 ? userChannels[0] : null);
+
   const hasMultipleChannels = userChannels && userChannels.length > 1;
+
+  useEffect(() => {
+    console.log("NavigationBar - Selected Channel:", selectedChannel);
+    console.log("NavigationBar - Displayed Channel:", primaryChannel);
+  }, [selectedChannel, primaryChannel]);
 
   const handleLogout = () => {
     logoutMutation.mutate();
   };
 
   const navigateToChannel = (channelId: number) => {
+    console.log("NavigationBar - Navigating to channel:", channelId);
     setLocation(`/channels/${channelId}`);
   };
 
@@ -74,7 +106,12 @@ export function NavigationBar({
                       key={channel.id}
                       onClick={() => navigateToChannel(channel.id)}
                       className={
-                        channel.id === primaryChannel.id ? "font-medium" : ""
+                        channel.id ===
+                        (selectedChannelId
+                          ? Number(selectedChannelId)
+                          : primaryChannel.id)
+                          ? "font-medium"
+                          : ""
                       }
                     >
                       {channel.name}

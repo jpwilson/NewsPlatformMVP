@@ -60,9 +60,11 @@ interface LocationWithChildren {
 export function ArticleEditor({
   channels,
   existingArticle,
+  defaultChannelId,
 }: {
   channels: Channel[];
   existingArticle?: ArticleWithSnakeCase;
+  defaultChannelId?: number;
 }) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -93,8 +95,11 @@ export function ArticleEditor({
       title: existingArticle?.title || "",
       content: existingArticle?.content || "",
       channelId:
-        existingArticle?.channelId || existingArticle?.channel_id || undefined,
-      category: existingArticle?.category || "Other", // Default category text (required by schema)
+        existingArticle?.channelId ||
+        existingArticle?.channel_id ||
+        defaultChannelId ||
+        (channels && channels.length > 0 ? channels[0].id : undefined),
+      category: existingArticle?.category || "Other",
       location: existingArticle?.location || "",
       locationId: existingArticle?.locationId || undefined,
       categoryId: existingArticle?.categoryId || undefined,

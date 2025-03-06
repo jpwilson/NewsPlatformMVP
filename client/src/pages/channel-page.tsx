@@ -67,6 +67,14 @@ export default function ChannelPage() {
       queryKey: [`/api/channels/${id}`],
     });
 
+  // Debug channel data when it changes
+  useEffect(() => {
+    if (channel) {
+      console.log("Channel data loaded:", channel);
+      console.log("created_at value:", channel.created_at);
+    }
+  }, [channel]);
+
   // Fetch articles for this channel
   const { data: articles, isLoading: loadingArticles } = useQuery<
     ArticleWithSnakeCase[]
@@ -283,33 +291,9 @@ export default function ChannelPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavigationBar />
+      <NavigationBar selectedChannelId={id} />
 
       <div className="container mx-auto p-4 lg:p-8">
-        {/* Channel selector (only visible to owner) */}
-        {isOwner && userChannels && userChannels.length > 1 && (
-          <div className="mb-6">
-            <div className="flex items-center gap-4 mb-2">
-              <h2 className="text-sm font-medium">Switch channel:</h2>
-              <Select value={id} onValueChange={handleChannelChange}>
-                <SelectTrigger className="w-[250px]">
-                  <SelectValue placeholder="Select a channel" />
-                </SelectTrigger>
-                <SelectContent>
-                  {userChannels.map((userChannel) => (
-                    <SelectItem
-                      key={userChannel.id}
-                      value={String(userChannel.id)}
-                    >
-                      {userChannel.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-
         <div className="grid lg:grid-cols-[2fr_1fr] gap-8">
           <div>
             <div className="flex justify-between items-start mb-8">
@@ -373,15 +357,6 @@ export default function ChannelPage() {
               </div>
 
               <div className="flex gap-2">
-                {isOwner && !isEditing && (
-                  <Link href="/articles/new">
-                    <Button variant="default">
-                      <PlusCircle className="h-4 w-4 mr-2" />
-                      New Article
-                    </Button>
-                  </Link>
-                )}
-
                 {isOwner &&
                   (isEditing ? (
                     <div className="flex gap-2">
@@ -434,12 +409,14 @@ export default function ChannelPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Articles</h2>
               {isOwner && (
-                <Link href="/articles/new">
-                  <Button variant="default">
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    New Article
-                  </Button>
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link href={`/channels/${id}/articles/new`}>
+                    <Button variant="default">
+                      <PlusCircle className="h-4 w-4 mr-2" />
+                      New Article
+                    </Button>
+                  </Link>
+                </div>
               )}
             </div>
 
@@ -603,12 +580,12 @@ export default function ChannelPage() {
                     Subscribers
                   </div>
                 </div>
-                <div className="col-span-2">
-                  <div className="text-sm text-muted-foreground mt-4">
-                    Created by{" "}
+                <div className="col-span-2 mt-3 border-t pt-3">
+                  <div className="text-sm mt-2">
+                    <span className="text-muted-foreground">Created by</span>{" "}
                     <Link
                       href={`/profile`}
-                      className="text-primary hover:underline"
+                      className="text-primary hover:underline font-medium"
                     >
                       {ownerInfo?.username ||
                         `User #${
@@ -616,11 +593,16 @@ export default function ChannelPage() {
                         }`}
                     </Link>
                   </div>
-                  {channel.created_at && (
-                    <div className="text-sm text-muted-foreground mt-2">
-                      Channel created: {formatDate(channel.created_at)}
-                    </div>
-                  )}
+                  <div className="text-sm mt-1">
+                    <span className="text-muted-foreground">
+                      Creation date:
+                    </span>{" "}
+                    <span className="font-medium">
+                      {channel && channel.created_at
+                        ? formatDate(channel.created_at)
+                        : "Not available"}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

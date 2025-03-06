@@ -19,12 +19,15 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={HomePage} />
+      <ProtectedRoute
+        path="/channels/:id/articles/new"
+        component={CreateArticle}
+      />
+      <ProtectedRoute path="/channels/new" component={CreateChannel} />
+      <Route path="/channels/:id" component={ChannelPage} />
       <ProtectedRoute path="/articles/new" component={CreateArticle} />
       <ProtectedRoute path="/articles/:id/edit" component={EditArticle} />
-      <ProtectedRoute path="/channels/new" component={CreateChannel} />
       <Route path="/articles/:id" component={ArticlePage} />
-      <Route path="/channels/:id" component={ChannelPage} />{" "}
-      {/* Add this route */}
       <Route path="/auth" component={AuthPage} />
       <Route path="/auth-callback" component={AuthCallback} />
       <Route path="/profile" component={ProfilePage} />
