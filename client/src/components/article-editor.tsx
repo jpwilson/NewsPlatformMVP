@@ -31,9 +31,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { Loader2, ChevronRight } from "lucide-react";
+import { Loader2, ChevronRight, Search } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -55,6 +55,70 @@ interface LocationWithChildren {
   type: string;
   created_at: string | null;
   children?: LocationWithChildren[];
+}
+
+// Simple Autocomplete component for searching categories and locations
+function SimpleAutocomplete({
+  items,
+  placeholder,
+  onSelect,
+}: {
+  items: { id: number; label: string }[];
+  placeholder: string;
+  onSelect: (id: number) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [showResults, setShowResults] = useState(false);
+
+  // Filter items based on search
+  const filteredItems = useMemo(() => {
+    if (!search) return [];
+    return items
+      .filter((item) => item.label.toLowerCase().includes(search.toLowerCase()))
+      .slice(0, 10); // Limit to 10 results
+  }, [items, search]);
+
+  return (
+    <div className="relative mb-2">
+      <div className="relative">
+        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder={placeholder}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setShowResults(e.target.value.length > 0);
+          }}
+          onFocus={() => setShowResults(search.length > 0)}
+          onBlur={() => {
+            // Delay hiding results to allow for item selection
+            setTimeout(() => setShowResults(false), 200);
+          }}
+          className="pl-8"
+        />
+      </div>
+
+      {showResults && filteredItems.length > 0 && (
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-input bg-popover shadow-md">
+          <div className="p-1">
+            {filteredItems.map((item) => (
+              <div
+                key={item.id}
+                className="relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+                onClick={() => {
+                  onSelect(item.id);
+                  setSearch("");
+                  setShowResults(false);
+                }}
+              >
+                {item.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ArticleEditor({
@@ -139,6 +203,44 @@ export function ArticleEditor({
       form.setValue("channelId", channels[0].id);
     }
   }, [channels, form]);
+
+  // Extract all categories into a flat list for search
+  const flatCategories = useMemo(() => {
+    const flattenCategories = (
+      items: CategoryWithChildren[] = [],
+      path = ""
+    ): { id: number; label: string }[] => {
+      return items.flatMap((item) => {
+        const label = path ? `${path} > ${item.name}` : item.name;
+        return [
+          { id: item.id, label },
+          ...(item.children ? flattenCategories(item.children, label) : []),
+        ];
+      });
+    };
+
+    return categories ? flattenCategories(categories) : [];
+  }, [categories]);
+
+  // Extract all locations into a flat list for search
+  const flatLocations = useMemo(() => {
+    const flattenLocations = (
+      items: LocationWithChildren[] = [],
+      path = ""
+    ): { id: number; label: string }[] => {
+      return items.flatMap((item) => {
+        const label = path
+          ? `${path} > ${item.name}${item.type ? ` (${item.type})` : ""}`
+          : `${item.name}${item.type ? ` (${item.type})` : ""}`;
+        return [
+          { id: item.id, label },
+          ...(item.children ? flattenLocations(item.children, label) : []),
+        ];
+      });
+    };
+
+    return locations ? flattenLocations(locations) : [];
+  }, [locations]);
 
   // Handle form submission
   const onSubmit = async (data: InsertArticle) => {
@@ -394,6 +496,36 @@ export function ArticleEditor({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Category</FormLabel>
+                {!isLoadingCategories && (
+                  <SimpleAutocomplete
+                    items={flatCategories}
+                    placeholder="Search for a category or select from dropdown..."
+                    onSelect={(id) => {
+                      field.onChange(id);
+
+                      // Also set the text category field for backwards compatibility
+                      const findCategory = (
+                        cats: CategoryWithChildren[]
+                      ): CategoryWithChildren | undefined => {
+                        for (const cat of cats) {
+                          if (cat.id === id) return cat;
+                          if (cat.children) {
+                            const found = findCategory(cat.children);
+                            if (found) return found;
+                          }
+                        }
+                        return undefined;
+                      };
+
+                      if (categories) {
+                        const selectedCategory = findCategory(categories);
+                        if (selectedCategory) {
+                          form.setValue("category", selectedCategory.name);
+                        }
+                      }
+                    }}
+                  />
+                )}
                 <Select
                   value={field.value?.toString() || ""}
                   onValueChange={(value) => {
@@ -443,6 +575,13 @@ export function ArticleEditor({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Location (optional)</FormLabel>
+                {!isLoadingLocations && (
+                  <SimpleAutocomplete
+                    items={flatLocations}
+                    placeholder="Search for a location or select from dropdown..."
+                    onSelect={(id) => field.onChange(id)}
+                  />
+                )}
                 <Select
                   value={field.value?.toString() || ""}
                   onValueChange={(value) =>
@@ -490,7 +629,7 @@ export function ArticleEditor({
               <FormControl>
                 <Textarea
                   placeholder="Write your article content here..."
-                  className="min-h-[400px]"
+                  className="min-h-[300px] max-h-[300px] overflow-y-auto"
                   {...field}
                 />
               </FormControl>
