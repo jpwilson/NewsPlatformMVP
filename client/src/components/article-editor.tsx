@@ -720,7 +720,9 @@ export function ArticleEditor({
               <FormLabel>Content</FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Write your article content here...\nUse blank lines to create paragraphs.\nYour formatting will be preserved."
+                  placeholder={`Write your article content here...
+Use blank lines to create paragraphs.
+Your formatting will be preserved.`}
                   className="min-h-[300px] max-h-[300px] overflow-y-auto font-sans"
                   {...field}
                   // Ensure proper handling of line breaks

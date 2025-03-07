@@ -41,7 +41,7 @@ function capitalizeFirstLetter(string: string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
-// Add a new function to format date without day of week
+// Add a new function to format date without day of week and year
 function formatDateWithoutDay(
   date: string | Date | undefined | null,
   showTime = false
@@ -50,7 +50,7 @@ function formatDateWithoutDay(
   const options: Intl.DateTimeFormatOptions = {
     month: "short",
     day: "numeric",
-    year: "2-digit",
+    // year removed as requested
   };
   if (showTime) {
     options.hour = "numeric";
@@ -430,12 +430,26 @@ export default function ArticlePage() {
                   const editedDate = article.lastEdited || article.last_edited;
                   const createdDate = article.created_at || article.createdAt;
 
-                  // Only show if both dates exist and are different
+                  // Only show if both dates exist and are meaningfully different (more than a few seconds)
                   if (editedDate && createdDate) {
-                    const editTime = new Date(editedDate).getTime();
-                    const createTime = new Date(createdDate).getTime();
+                    const editDateTime = new Date(editedDate);
+                    const createDateTime = new Date(createdDate);
 
-                    if (editTime !== createTime) {
+                    // Format both dates to exclude seconds for comparison
+                    const editTimeFormatted = editDateTime
+                      .toISOString()
+                      .slice(0, 16);
+                    const createTimeFormatted = createDateTime
+                      .toISOString()
+                      .slice(0, 16);
+
+                    // Only show the edit time if they differ when ignoring seconds
+                    if (
+                      editTimeFormatted !== createTimeFormatted &&
+                      Math.abs(
+                        editDateTime.getTime() - createDateTime.getTime()
+                      ) > 60000
+                    ) {
                       return (
                         <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-md">
                           <span className="font-medium">Latest Edit:</span>{" "}

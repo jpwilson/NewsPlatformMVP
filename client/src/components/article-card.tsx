@@ -102,7 +102,9 @@ export function ArticleCard({ article }: { article: ArticleWithSnakeCase }) {
                   {formatDate(article.created_at || article.createdAt)}
                 </span>
                 {article.location && <span>📍 {article.location}</span>}
-                <span>📂 {article.category}</span>
+                {article.category && article.category.trim() !== "" && (
+                  <span>🏷️ {article.category}</span>
+                )}
               </div>
               <button
                 onClick={handleChannelClick}
