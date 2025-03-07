@@ -23,7 +23,7 @@ export function formatDate(
       
       if (includeTime) {
         const time = date.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
+          hour: 'numeric',
           minute: '2-digit',
           hour12: true 
         });

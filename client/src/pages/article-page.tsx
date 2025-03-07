@@ -41,6 +41,24 @@ function capitalizeFirstLetter(string: string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
+// Add a new function to format date without day of week
+function formatDateWithoutDay(
+  date: string | Date | undefined | null,
+  showTime = false
+) {
+  if (!date) return "";
+  const options: Intl.DateTimeFormatOptions = {
+    month: "short",
+    day: "numeric",
+    year: "2-digit",
+  };
+  if (showTime) {
+    options.hour = "numeric";
+    options.minute = "2-digit";
+  }
+  return new Date(date).toLocaleDateString("en-US", options);
+}
+
 export default function ArticlePage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -283,7 +301,7 @@ export default function ArticlePage() {
         <NavigationBar />
 
         <article className="container mx-auto p-4 lg:p-8 max-w-4xl">
-          <header className="mb-8">
+          <header className="mb-8 border-b pb-6">
             <div className="flex justify-between items-start">
               {isEditing ? (
                 <input
@@ -393,131 +411,116 @@ export default function ArticlePage() {
               </div>
             )}
 
-            <div className="flex flex-col gap-2 text-muted-foreground">
+            <div className="flex flex-col gap-3 text-muted-foreground mt-4">
               <div className="flex items-center gap-4 flex-wrap">
-                <span>
-                  <span className="font-medium">Created:</span>{" "}
+                <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-md">
+                  <span className="font-medium">Published:</span>{" "}
                   {formatDate(article.created_at || article.createdAt, true)}
                 </span>
-                {(article.publishedAt || article.published_at) && (
-                  <span>
-                    <span className="font-medium">Published:</span>{" "}
-                    {formatDate(
-                      article.publishedAt || article.published_at,
-                      true
-                    )}
+                {(() => {
+                  // Safely get the dates
+                  const editedDate = article.lastEdited || article.last_edited;
+                  const createdDate = article.created_at || article.createdAt;
+
+                  // Only show if both dates exist and are different
+                  if (editedDate && createdDate) {
+                    const editTime = new Date(editedDate).getTime();
+                    const createTime = new Date(createdDate).getTime();
+
+                    if (editTime !== createTime) {
+                      return (
+                        <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-md">
+                          <span className="font-medium">Latest Edit:</span>{" "}
+                          {formatDateWithoutDay(editedDate, true)}
+                        </span>
+                      );
+                    }
+                  }
+                  return null;
+                })()}
+                {article.location && !isEditing && (
+                  <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-md">
+                    <span className="font-medium">📍 Location:</span>{" "}
+                    {article.location}
                   </span>
                 )}
-                {(article.lastEdited || article.last_edited) &&
-                  article.lastEdited !== article.createdAt && (
-                    <span>
-                      <span className="font-medium">Last edited:</span>{" "}
-                      {formatDate(
-                        article.lastEdited || article.last_edited,
-                        true
-                      )}
-                    </span>
-                  )}
-                {article.location && <span>📍 {article.location}</span>}
-                <span>📂 {article.category}</span>
+                {isEditing && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Location:</span>
+                    <input
+                      type="text"
+                      value={editableLocation}
+                      onChange={(e) => setEditableLocation(e.target.value)}
+                      placeholder="Location (optional)"
+                      className="px-2 py-1 rounded-md border border-input bg-background w-36"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-4 mb-2">
+                <span className="font-medium">Categories:</span>{" "}
+                {!isEditing ? (
+                  <span className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 px-3 py-1 rounded-md">
+                    {capitalizeFirstLetter(article.category || "Uncategorized")}
+                  </span>
+                ) : (
+                  <select
+                    value={editableCategory}
+                    onChange={(e) => setEditableCategory(e.target.value)}
+                    className="px-2 py-1 rounded-md border border-input bg-background"
+                  >
+                    <option value="">Select category</option>
+                    <option value="politics">Politics</option>
+                    <option value="technology">Technology</option>
+                    <option value="sports">Sports</option>
+                    <option value="health">Health</option>
+                    <option value="entertainment">Entertainment</option>
+                    <option value="business">Business</option>
+                    <option value="science">Science</option>
+                    <option value="environment">Environment</option>
+                    <option value="education">Education</option>
+                    <option value="other">Other</option>
+                  </select>
+                )}
               </div>
               <button
                 onClick={handleChannelClick}
-                className="text-primary hover:underline w-fit"
+                className="text-primary hover:underline w-fit font-medium"
               >
                 By: {article.channel?.name || "Unknown Channel"}
               </button>
 
               {/* Article metrics */}
-              <div className="flex items-center gap-5 mt-2">
+              <div className="flex items-center gap-5 mt-3 bg-slate-50 dark:bg-slate-900 p-3 rounded-lg">
                 <div className="flex items-center">
-                  <Eye className="h-4 w-4 mr-1" />
-                  <span className="text-sm">{views} views</span>
+                  <Eye className="h-5 w-5 mr-2 text-slate-600 dark:text-slate-300" />
+                  <span className="text-sm font-medium">{views} views</span>
                 </div>
 
                 <div className="flex items-center">
-                  <ThumbsUp className="h-4 w-4 mr-1" />
-                  <span className="text-sm">{likes} likes</span>
+                  <ThumbsUp className="h-5 w-5 mr-2 text-green-600 dark:text-green-400" />
+                  <span className="text-sm font-medium">{likes} likes</span>
                 </div>
 
                 <div className="flex items-center">
-                  <ThumbsDown className="h-4 w-4 mr-1" />
-                  <span className="text-sm">{dislikes} dislikes</span>
+                  <ThumbsDown className="h-5 w-5 mr-2 text-red-600 dark:text-red-400" />
+                  <span className="text-sm font-medium">
+                    {dislikes} dislikes
+                  </span>
                 </div>
 
                 <div className="flex items-center">
-                  <MessageSquare className="h-4 w-4 mr-1" />
-                  <span className="text-sm">{commentCount} comments</span>
+                  <MessageSquare className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-medium">
+                    {commentCount} comments
+                  </span>
                 </div>
               </div>
             </div>
           </header>
 
-          {/* Article metadata */}
-          <div className="flex items-center text-sm text-muted-foreground space-x-4 mb-6">
-            <div className="flex items-center">
-              <span className="font-semibold">
-                {article.channel?.name || "Unknown channel"}
-              </span>
-            </div>
-            <span>•</span>
-            <div>
-              {isEditing ? (
-                <select
-                  value={editableCategory}
-                  onChange={(e) => setEditableCategory(e.target.value)}
-                  className="px-2 py-1 rounded-md border border-input bg-background"
-                >
-                  <option value="">Select category</option>
-                  <option value="politics">Politics</option>
-                  <option value="technology">Technology</option>
-                  <option value="sports">Sports</option>
-                  <option value="health">Health</option>
-                  <option value="entertainment">Entertainment</option>
-                  <option value="business">Business</option>
-                  <option value="science">Science</option>
-                  <option value="environment">Environment</option>
-                  <option value="education">Education</option>
-                  <option value="other">Other</option>
-                </select>
-              ) : (
-                <span>
-                  {capitalizeFirstLetter(article.category || "Uncategorized")}
-                </span>
-              )}
-            </div>
-            <span>•</span>
-            <div>
-              {isEditing ? (
-                <input
-                  type="text"
-                  value={editableLocation}
-                  onChange={(e) => setEditableLocation(e.target.value)}
-                  placeholder="Location (optional)"
-                  className="px-2 py-1 rounded-md border border-input bg-background w-36"
-                />
-              ) : (
-                <span>{article.location || "Global"}</span>
-              )}
-            </div>
-            <span>•</span>
-            <div>Created: {formatDate(article.createdAt)}</div>
-            {article.publishedAt && (
-              <>
-                <span>•</span>
-                <div>Published: {formatDate(article.publishedAt, true)}</div>
-              </>
-            )}
-            {article.lastEdited && (
-              <>
-                <span>•</span>
-                <div>Last edited: {formatDate(article.lastEdited, true)}</div>
-              </>
-            )}
-          </div>
-
           {/* Article content */}
-          <div className="prose prose-lg max-w-none">
+          <div className="prose prose-lg max-w-none dark:prose-invert">
             {isEditing ? (
               <textarea
                 value={editableContent}
@@ -530,7 +533,7 @@ export default function ArticlePage() {
           </div>
 
           {/* Interactive like/dislike buttons at the bottom */}
-          <div className="flex items-center gap-4 mb-8 border-t pt-4">
+          <div className="flex items-center gap-4 my-8 border-t border-b py-6">
             <div className="text-lg font-medium mr-2">What did you think?</div>
             <Button
               variant={userLiked ? "default" : "outline"}
