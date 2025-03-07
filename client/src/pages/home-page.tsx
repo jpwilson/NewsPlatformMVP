@@ -38,6 +38,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { useSelectedChannel } from "@/hooks/use-selected-channel";
 
 // Define ordering options
 type OrderField = "createdAt" | "viewCount" | "comments" | "likes" | "dislikes";
@@ -65,6 +66,7 @@ interface OrderOption {
 
 export default function HomePage() {
   const { user } = useAuth();
+  const { selectedChannelId } = useSelectedChannel();
   const [orderField, setOrderField] = useState<OrderField>("createdAt");
   const [orderDirection, setOrderDirection] = useState<OrderDirection>("desc");
   const [searchTerm, setSearchTerm] = useState("");
@@ -277,7 +279,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavigationBar />
+      <NavigationBar selectedChannelId={selectedChannelId} />
 
       <div className="container mx-auto p-4 lg:p-8">
         <div className="flex justify-between items-center mb-8">
@@ -463,7 +465,13 @@ export default function HomePage() {
 
             {/* Write Article Button */}
             {user && (
-              <Link href="/articles/new">
+              <Link
+                href={
+                  selectedChannelId
+                    ? `/channels/${selectedChannelId}/articles/new`
+                    : "/articles/new"
+                }
+              >
                 <Button>
                   <PlusCircle className="h-4 w-4 mr-2" />
                   Write an Article

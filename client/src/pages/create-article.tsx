@@ -6,10 +6,13 @@ import { useAuth } from "@/hooks/use-auth";
 import { Redirect, useLocation, useParams } from "wouter";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
+import { useSelectedChannel } from "@/hooks/use-selected-channel";
 
 export default function CreateArticle() {
   const { user } = useAuth();
   const [location] = useLocation();
+  const { selectedChannelId: contextChannelId } = useSelectedChannel();
+
   // Extract channel ID from params if present (for /channels/:id/articles/new route)
   const params = useParams<{ id: string }>();
   const channelIdFromParams = params?.id;
@@ -19,10 +22,10 @@ export default function CreateArticle() {
     ? parseInt(channelIdFromParams, 10)
     : undefined;
 
-  // Only use the extracted ID if it's valid
+  // Use URL param if valid, otherwise fallback to context, or undefined if neither exists
   const currentChannelId = !isNaN(Number(pathChannelId))
     ? pathChannelId
-    : undefined;
+    : contextChannelId;
 
   useEffect(() => {
     console.log("Create Article - Current location:", location);
@@ -30,8 +33,9 @@ export default function CreateArticle() {
       "Create Article - Channel ID from params:",
       channelIdFromParams
     );
+    console.log("Create Article - Channel ID from context:", contextChannelId);
     console.log("Create Article - Current channel ID:", currentChannelId);
-  }, [location, channelIdFromParams, currentChannelId]);
+  }, [location, channelIdFromParams, contextChannelId, currentChannelId]);
 
   const { data: channels, isLoading } = useQuery<Channel[]>({
     queryKey: ["/api/channels"],

@@ -12,6 +12,7 @@ import { Newspaper, LogOut, ChevronDown, PlusCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Channel } from "@shared/schema";
 import { useEffect } from "react";
+import { useSelectedChannel } from "@/hooks/use-selected-channel";
 
 export function NavigationBar({
   hideAuthButtons = false,
@@ -22,10 +23,33 @@ export function NavigationBar({
 }) {
   const { user, logoutMutation } = useAuth();
   const [location, setLocation] = useLocation();
+  const { selectedChannelId: contextChannelId, setSelectedChannelId } =
+    useSelectedChannel();
+
+  // Use the prop value if provided (for explicit page-level control), otherwise use the context value
+  const effectiveChannelId =
+    selectedChannelId !== undefined
+      ? Number(selectedChannelId)
+      : contextChannelId;
 
   useEffect(() => {
-    console.log("NavigationBar - Selected Channel ID:", selectedChannelId);
-  }, [selectedChannelId]);
+    console.log(
+      "NavigationBar - Selected Channel ID from prop:",
+      selectedChannelId
+    );
+    console.log(
+      "NavigationBar - Selected Channel ID from context:",
+      contextChannelId
+    );
+    console.log("NavigationBar - Effective Channel ID:", effectiveChannelId);
+  }, [selectedChannelId, contextChannelId, effectiveChannelId]);
+
+  // When selectedChannelId prop changes and it's defined, update the context
+  useEffect(() => {
+    if (selectedChannelId !== undefined) {
+      setSelectedChannelId(Number(selectedChannelId));
+    }
+  }, [selectedChannelId, setSelectedChannelId]);
 
   // Fetch user's owned channels if the user is logged in
   const { data: userChannels } = useQuery<Channel[]>({
@@ -45,14 +69,12 @@ export function NavigationBar({
 
   // Get the selected channel or default to the first one
   const selectedChannel =
-    userChannels && selectedChannelId
-      ? userChannels.find(
-          (c) => c.id.toString() === selectedChannelId.toString()
-        )
+    userChannels && effectiveChannelId
+      ? userChannels.find((c) => c.id === effectiveChannelId)
       : null;
 
   // Get the user's primary channel (first one they created)
-  const primaryChannel =
+  const displayedChannel =
     selectedChannel ||
     (userChannels && userChannels.length > 0 ? userChannels[0] : null);
 
@@ -60,8 +82,8 @@ export function NavigationBar({
 
   useEffect(() => {
     console.log("NavigationBar - Selected Channel:", selectedChannel);
-    console.log("NavigationBar - Displayed Channel:", primaryChannel);
-  }, [selectedChannel, primaryChannel]);
+    console.log("NavigationBar - Displayed Channel:", displayedChannel);
+  }, [selectedChannel, displayedChannel]);
 
   const handleLogout = () => {
     logoutMutation.mutate();
@@ -69,6 +91,7 @@ export function NavigationBar({
 
   const navigateToChannel = (channelId: number) => {
     console.log("NavigationBar - Navigating to channel:", channelId);
+    setSelectedChannelId(channelId);
     setLocation(`/channels/${channelId}`);
   };
 
@@ -85,7 +108,7 @@ export function NavigationBar({
 
         <div className="flex items-center gap-4">
           {/* Show channel info if user has created at least one channel */}
-          {primaryChannel && (
+          {displayedChannel && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -94,7 +117,7 @@ export function NavigationBar({
                   className="text-sm text-muted-foreground hidden md:flex items-center gap-1"
                 >
                   Channel:{" "}
-                  <span className="font-medium">{primaryChannel.name}</span>
+                  <span className="font-medium">{displayedChannel.name}</span>
                   <ChevronDown className="h-4 w-4 ml-1" />
                 </Button>
               </DropdownMenuTrigger>
@@ -106,12 +129,7 @@ export function NavigationBar({
                       key={channel.id}
                       onClick={() => navigateToChannel(channel.id)}
                       className={
-                        channel.id ===
-                        (selectedChannelId
-                          ? Number(selectedChannelId)
-                          : primaryChannel.id)
-                          ? "font-medium"
-                          : ""
+                        channel.id === effectiveChannelId ? "font-medium" : ""
                       }
                     >
                       {channel.name}
