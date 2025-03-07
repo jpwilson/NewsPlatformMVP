@@ -295,6 +295,14 @@ export default function ArticlePage() {
   const userLiked = article.userReaction === true;
   const userDisliked = article.userReaction === false;
 
+  // Get location from either location or any nested location objects
+  const articleLocation =
+    article.location ||
+    ((article as any).locationDetails
+      ? (article as any).locationDetails.name
+      : null) ||
+    ((article as any)._location ? (article as any)._location.name : null);
+
   return (
     <>
       <div className="min-h-screen bg-background">
@@ -438,14 +446,56 @@ export default function ArticlePage() {
                   }
                   return null;
                 })()}
-                {article.location && !isEditing && (
-                  <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-md">
-                    <span className="font-medium">📍 Location:</span>{" "}
-                    {article.location}
-                  </span>
+              </div>
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                {/* Only show categories if they exist and are not empty strings */}
+                {article.category &&
+                  article.category.trim() !== "" &&
+                  article.category.toLowerCase() !== "uncategorized" && (
+                    <>
+                      <span className="font-medium">Categories:</span>{" "}
+                      {!isEditing ? (
+                        <span className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 px-3 py-1 rounded-md">
+                          {capitalizeFirstLetter(article.category)}
+                        </span>
+                      ) : (
+                        <select
+                          value={editableCategory}
+                          onChange={(e) => setEditableCategory(e.target.value)}
+                          className="px-2 py-1 rounded-md border border-input bg-background"
+                        >
+                          <option value="">Select category</option>
+                          <option value="politics">Politics</option>
+                          <option value="technology">Technology</option>
+                          <option value="sports">Sports</option>
+                          <option value="health">Health</option>
+                          <option value="entertainment">Entertainment</option>
+                          <option value="business">Business</option>
+                          <option value="science">Science</option>
+                          <option value="environment">Environment</option>
+                          <option value="education">Education</option>
+                          <option value="other">Other</option>
+                        </select>
+                      )}
+                    </>
+                  )}
+
+                {/* Only show location if it exists and is not empty */}
+                {articleLocation && articleLocation.trim() !== "" && (
+                  <>
+                    {article.category &&
+                      article.category.trim() !== "" &&
+                      article.category.toLowerCase() !== "uncategorized" && (
+                        <span className="mx-2">|</span>
+                      )}
+                    <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-md">
+                      <span className="font-medium">📍 Location:</span>{" "}
+                      {articleLocation}
+                    </span>
+                  </>
                 )}
                 {isEditing && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 ml-4">
                     <span className="font-medium">Location:</span>
                     <input
                       type="text"
@@ -455,32 +505,6 @@ export default function ArticlePage() {
                       className="px-2 py-1 rounded-md border border-input bg-background w-36"
                     />
                   </div>
-                )}
-              </div>
-              <div className="flex items-center gap-4 mb-2">
-                <span className="font-medium">Categories:</span>{" "}
-                {!isEditing ? (
-                  <span className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 px-3 py-1 rounded-md">
-                    {capitalizeFirstLetter(article.category || "Uncategorized")}
-                  </span>
-                ) : (
-                  <select
-                    value={editableCategory}
-                    onChange={(e) => setEditableCategory(e.target.value)}
-                    className="px-2 py-1 rounded-md border border-input bg-background"
-                  >
-                    <option value="">Select category</option>
-                    <option value="politics">Politics</option>
-                    <option value="technology">Technology</option>
-                    <option value="sports">Sports</option>
-                    <option value="health">Health</option>
-                    <option value="entertainment">Entertainment</option>
-                    <option value="business">Business</option>
-                    <option value="science">Science</option>
-                    <option value="environment">Environment</option>
-                    <option value="education">Education</option>
-                    <option value="other">Other</option>
-                  </select>
                 )}
               </div>
               <button
@@ -528,7 +552,13 @@ export default function ArticlePage() {
                 className="w-full min-h-[500px] p-4 border border-input bg-background rounded-md"
               />
             ) : (
-              <div dangerouslySetInnerHTML={{ __html: article.content }} />
+              // Use white-space-pre-line to preserve paragraphs and text-justify for justified text
+              <div
+                className="whitespace-pre-line text-justify"
+                dangerouslySetInnerHTML={{
+                  __html: article.content.replace(/\n/g, "<br />"),
+                }}
+              />
             )}
           </div>
 

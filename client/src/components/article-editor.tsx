@@ -163,7 +163,7 @@ export function ArticleEditor({
         existingArticle?.channel_id ||
         defaultChannelId ||
         (channels && channels.length > 0 ? channels[0].id : undefined),
-      category: existingArticle?.category || "Other",
+      category: existingArticle?.category || "",
       location: existingArticle?.location || "",
       locationId: existingArticle?.locationId || undefined,
       categoryId: existingArticle?.categoryId || undefined,
@@ -265,11 +265,43 @@ export function ArticleEditor({
       return;
     }
 
+    // Get the location name if locationId is provided
+    let locationName = "";
+    if (data.locationId && locations) {
+      // Helper function to find a location by ID in the nested structure
+      const findLocation = (
+        items: LocationWithChildren[],
+        id: number
+      ): LocationWithChildren | undefined => {
+        for (const item of items) {
+          if (item.id === id) return item;
+          if (item.children) {
+            const found = findLocation(item.children, id);
+            if (found) return found;
+          }
+        }
+        return undefined;
+      };
+
+      const location = findLocation(
+        locations,
+        typeof data.locationId === "string"
+          ? parseInt(data.locationId)
+          : data.locationId
+      );
+
+      if (location) {
+        locationName = location.name;
+      }
+    }
+
     // Process special values for categoryId and locationId
     const processedData = {
       ...data,
       userId: user.id,
-      channelId: data.channelId, // Ensure channelId is included
+      channelId: data.channelId,
+      // Don't set a default category if none is selected
+      category: data.category === "Other" ? "" : data.category,
       categoryId:
         data.categoryId &&
         typeof data.categoryId === "string" &&
@@ -285,6 +317,8 @@ export function ArticleEditor({
           isNaN(parseInt(data.locationId)))
           ? undefined
           : data.locationId,
+      // Set the location name based on the selected locationId
+      location: locationName || data.location || "",
     };
 
     console.log("Submitting article with data:", processedData);
@@ -579,14 +613,72 @@ export function ArticleEditor({
                   <SimpleAutocomplete
                     items={flatLocations}
                     placeholder="Search for a location or select from dropdown..."
-                    onSelect={(id) => field.onChange(id)}
+                    onSelect={(id) => {
+                      field.onChange(id);
+
+                      // Also set the text location field for backwards compatibility
+                      const findLocation = (
+                        locs: LocationWithChildren[]
+                      ): LocationWithChildren | undefined => {
+                        for (const loc of locs) {
+                          if (loc.id === id) return loc;
+                          if (loc.children) {
+                            const found = findLocation(loc.children);
+                            if (found) return found;
+                          }
+                        }
+                        return undefined;
+                      };
+
+                      if (locations) {
+                        const selectedLocation = findLocation(locations);
+                        if (selectedLocation) {
+                          form.setValue("location", selectedLocation.name);
+                          console.log(
+                            `Set location name to: ${selectedLocation.name}`
+                          );
+                        }
+                      }
+                    }}
                   />
                 )}
                 <Select
                   value={field.value?.toString() || ""}
-                  onValueChange={(value) =>
-                    field.onChange(value ? parseInt(value) : undefined)
-                  }
+                  onValueChange={(value) => {
+                    field.onChange(
+                      value === "no-location"
+                        ? undefined
+                        : value
+                        ? parseInt(value)
+                        : undefined
+                    );
+
+                    // Also set the text location field for backwards compatibility
+                    if (value && value !== "no-location" && locations) {
+                      const findLocation = (
+                        locs: LocationWithChildren[]
+                      ): LocationWithChildren | undefined => {
+                        for (const loc of locs) {
+                          if (loc.id.toString() === value) return loc;
+                          if (loc.children) {
+                            const found = findLocation(loc.children);
+                            if (found) return found;
+                          }
+                        }
+                        return undefined;
+                      };
+
+                      const selectedLocation = findLocation(locations);
+                      if (selectedLocation) {
+                        form.setValue("location", selectedLocation.name);
+                        console.log(
+                          `Set location name to: ${selectedLocation.name}`
+                        );
+                      }
+                    } else if (value === "no-location") {
+                      form.setValue("location", "");
+                    }
+                  }}
                 >
                   <FormControl>
                     <SelectTrigger>
@@ -628,11 +720,20 @@ export function ArticleEditor({
               <FormLabel>Content</FormLabel>
               <FormControl>
                 <Textarea
-                  placeholder="Write your article content here..."
-                  className="min-h-[300px] max-h-[300px] overflow-y-auto"
+                  placeholder="Write your article content here...\nUse blank lines to create paragraphs.\nYour formatting will be preserved."
+                  className="min-h-[300px] max-h-[300px] overflow-y-auto font-sans"
                   {...field}
+                  // Ensure proper handling of line breaks
+                  onChange={(e) => {
+                    // Use the raw value to preserve all line breaks
+                    field.onChange(e.target.value);
+                  }}
                 />
               </FormControl>
+              <p className="text-sm text-muted-foreground mt-1">
+                Tip: Use blank lines to create paragraphs. Your formatting will
+                be preserved.
+              </p>
             </FormItem>
           )}
         />
