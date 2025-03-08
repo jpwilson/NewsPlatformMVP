@@ -11,7 +11,8 @@ import HomePage from "@/pages/home-page";
 import ArticlePage from "@/pages/article-page";
 import CreateArticle from "@/pages/create-article";
 import CreateChannel from "@/pages/create-channel";
-import ChannelPage from "@/pages/channel-page"; // Add this import
+import ChannelPage from "@/pages/channel-page";
+import ChannelsPage from "@/pages/channels-page";
 import AuthCallback from "./pages/auth-callback";
 import ProfilePage from "./pages/profile-page";
 import EditArticle from "@/pages/edit-article";
@@ -26,6 +27,7 @@ function Router() {
       />
       <ProtectedRoute path="/channels/new" component={CreateChannel} />
       <Route path="/channels/:id" component={ChannelPage} />
+      <Route path="/channels" component={ChannelsPage} />
       <ProtectedRoute path="/articles/new" component={CreateArticle} />
       <ProtectedRoute path="/articles/:id/edit" component={EditArticle} />
       <Route path="/articles/:id" component={ArticlePage} />
