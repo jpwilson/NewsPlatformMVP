@@ -87,6 +87,8 @@ export function NavigationBar({
 
   const handleLogout = () => {
     logoutMutation.mutate();
+    // Force redirect to the home page after logout
+    setLocation("/");
   };
 
   const navigateToChannel = (channelId: number) => {

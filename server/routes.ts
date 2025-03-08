@@ -724,7 +724,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // First, fetch the user's subscriptions
       const { data: subscriptions, error: subscriptionsError } = await supabase
         .from("subscriptions")
-        .select("channel_id")
+        .select("*")  // Select all fields including created_at
         .eq("user_id", req.user.id);
       
       if (subscriptionsError) throw subscriptionsError;
@@ -743,7 +743,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
       if (channelsError) throw channelsError;
       
-      res.json(channels || []);
+      // For each channel, get the subscriber count
+      const enrichedChannels = await Promise.all(channels.map(async (channel) => {
+        // Get subscriber count
+        const { count, error: countError } = await supabase
+          .from("subscriptions")
+          .select("*", { count: 'exact', head: true })
+          .eq("channel_id", channel.id);
+          
+        // Find the subscription date for this user+channel
+        const subscription = subscriptions.find(sub => sub.channel_id === channel.id);
+        const subscriptionDate = subscription ? subscription.created_at : null;
+        
+        return {
+          ...channel,
+          subscriberCount: count || 0,
+          subscriptionDate
+        };
+      }));
+      
+      res.json(enrichedChannels || []);
     } catch (error) {
       console.error("Error fetching user subscriptions:", error);
       res.status(500).json({ error: "Failed to fetch subscriptions" });
