@@ -105,7 +105,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Channel not found" });
       }
       
-      res.json(channel);
+      // Get subscriber count
+      const { count: subscriberCount, error: countError } = await supabase
+        .from("subscriptions")
+        .select("*", { count: 'exact', head: true })
+        .eq("channel_id", id);
+        
+      if (countError) {
+        console.error("Error fetching subscriber count:", countError);
+      }
+      
+      // Add subscriber count to the channel data
+      const channelWithCount = {
+        ...channel,
+        subscriberCount: subscriberCount || 0
+      };
+      
+      res.json(channelWithCount);
     } catch (error) {
       console.error("Error fetching channel:", error);
       res.status(500).json({ error: "Failed to fetch channel" });

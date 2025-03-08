@@ -46,6 +46,7 @@ type SortOrder = "asc" | "desc";
 type ExtendedChannel = Channel & {
   created_at?: string;
   user_id?: number;
+  subscriberCount?: number;
 };
 
 export default function ChannelPage() {
@@ -241,6 +242,7 @@ export default function ChannelPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/channels/${id}`] });
       toast({
         title: "Subscribed",
         description: `You are now subscribed to ${channel?.name}`,
@@ -254,6 +256,7 @@ export default function ChannelPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/channels/${id}`] });
       toast({
         title: "Unsubscribed",
         description: `You have unsubscribed from ${channel?.name}`,
@@ -575,7 +578,9 @@ export default function ChannelPage() {
                   <div className="text-sm text-muted-foreground">Articles</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">0</div>
+                  <div className="text-2xl font-bold">
+                    {channel?.subscriberCount || 0}
+                  </div>
                   <div className="text-sm text-muted-foreground">
                     Subscribers
                   </div>

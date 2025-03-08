@@ -17,6 +17,9 @@ export function ChannelCard({ channel }: { channel: Channel }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/channels/${channel.id}`],
+      });
       toast({
         title: "Subscribed",
         description: `You are now subscribed to ${channel.name}`,
@@ -30,6 +33,9 @@ export function ChannelCard({ channel }: { channel: Channel }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/channels/${channel.id}`],
+      });
       toast({
         title: "Unsubscribed",
         description: `You have unsubscribed from ${channel.name}`,
@@ -45,23 +51,23 @@ export function ChannelCard({ channel }: { channel: Channel }) {
           <Users className="h-4 w-4 text-muted-foreground" />
         </div>
       </CardHeader>
-      
+
       <CardContent>
         {channel.description && (
           <p className="text-sm text-muted-foreground mb-4">
             {channel.description}
           </p>
         )}
-        
+
         {user && user.id !== channel.userId && (
           <Button
             variant="outline"
             size="sm"
             className="w-full"
-            onClick={() =>
-              subscribeMutation.mutate()
+            onClick={() => subscribeMutation.mutate()}
+            disabled={
+              subscribeMutation.isPending || unsubscribeMutation.isPending
             }
-            disabled={subscribeMutation.isPending || unsubscribeMutation.isPending}
           >
             Subscribe
           </Button>
