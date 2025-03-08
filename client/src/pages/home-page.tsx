@@ -622,7 +622,7 @@ export default function HomePage() {
                   Popular Channels
                 </h2>
                 <Link href="/channels">
-                  <Button variant="ghost" size="sm" className="text-xs h-7">
+                  <Button size="sm" className="text-xs h-7">
                     Explore Channels
                   </Button>
                 </Link>

@@ -15,10 +15,11 @@ import {
   PlusCircle,
   Menu,
   Users,
+  ChevronRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Channel } from "@shared/schema";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSelectedChannel } from "@/hooks/use-selected-channel";
 import {
   Sheet,
@@ -27,6 +28,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export function NavigationBar({
   hideAuthButtons = false,
@@ -191,35 +197,43 @@ export function NavigationBar({
 
                 {/* Popular Channels Section for Mobile */}
                 <div className="pt-4 border-t">
-                  <h3 className="font-medium flex items-center gap-2 mb-2">
-                    <Users className="h-5 w-5" />
-                    Popular Channels
-                  </h3>
-                  <div className="pl-7 space-y-2">
-                    {popularChannels?.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
-                        No channels available
-                      </p>
-                    ) : (
-                      <>
-                        {popularChannels?.slice(0, 5).map((channel) => (
-                          <Link
-                            key={channel.id}
-                            href={`/channels/${channel.id}`}
-                            className="block py-1 text-sm"
-                          >
-                            {channel.name}
-                          </Link>
-                        ))}
-                        <Link
-                          href="/channels"
-                          className="block py-1 text-sm font-medium text-primary"
-                        >
-                          Browse All Channels
-                        </Link>
-                      </>
-                    )}
-                  </div>
+                  <Collapsible defaultOpen={true}>
+                    <CollapsibleTrigger className="flex items-center justify-between w-full py-2">
+                      <div className="font-medium flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        Popular Channels
+                      </div>
+                      <ChevronRight className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-90" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="pl-7 space-y-2 mt-2">
+                        {popularChannels?.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            No channels available
+                          </p>
+                        ) : (
+                          <>
+                            {popularChannels?.slice(0, 5).map((channel) => (
+                              <Link
+                                key={channel.id}
+                                href={`/channels/${channel.id}`}
+                                className="block py-1 text-sm"
+                              >
+                                {channel.name}
+                              </Link>
+                            ))}
+                            <div className="mt-3">
+                              <Link href="/channels">
+                                <Button size="sm" className="w-full">
+                                  Explore Channels
+                                </Button>
+                              </Link>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 </div>
               </div>
             </SheetContent>

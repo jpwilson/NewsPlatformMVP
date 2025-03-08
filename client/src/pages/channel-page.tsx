@@ -38,6 +38,7 @@ import { formatDate } from "@/lib/date-utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { AuthDialog } from "@/components/auth-dialog";
 
 type SortField = "title" | "createdAt" | "category";
 type SortOrder = "asc" | "desc";
@@ -61,6 +62,14 @@ export default function ChannelPage() {
   const [editedName, setEditedName] = useState("");
   const [editedDescription, setEditedDescription] = useState("");
   const [editedCategory, setEditedCategory] = useState("");
+  const [authDialogOpen, setAuthDialogOpen] = useState(!user);
+
+  // Redirect to home if auth dialog is closed without login
+  useEffect(() => {
+    if (!user && !authDialogOpen) {
+      setLocation("/");
+    }
+  }, [user, authDialogOpen, setLocation]);
 
   // Fetch current channel
   const { data: channel, isLoading: loadingChannel } =
@@ -296,210 +305,156 @@ export default function ChannelPage() {
     <div className="min-h-screen bg-background">
       <NavigationBar selectedChannelId={id} />
 
-      <div className="container mx-auto p-4 lg:p-8">
-        <div className="grid lg:grid-cols-[2fr_1fr] gap-8">
-          <div>
-            <div className="flex justify-between items-start mb-8">
-              <div>
-                {isEditing ? (
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="channel-name">Channel Name</Label>
-                      <Input
-                        id="channel-name"
-                        type="text"
-                        value={editedName}
-                        onChange={(e) => setEditedName(e.target.value)}
-                        className="max-w-md"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="channel-description">Description</Label>
-                      <Textarea
-                        id="channel-description"
-                        value={editedDescription}
-                        onChange={(e) => setEditedDescription(e.target.value)}
-                        className="max-w-md"
-                        rows={3}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="channel-category">
-                        Category (optional)
-                      </Label>
-                      <Input
-                        id="channel-category"
-                        type="text"
-                        value={editedCategory}
-                        onChange={(e) => setEditedCategory(e.target.value)}
-                        className="max-w-md"
-                        placeholder="e.g. Technology, Sports, News"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <h1 className="text-4xl font-bold mb-2">{channel.name}</h1>
-                    {channel.created_at && (
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Created on {formatDate(channel.created_at)}
-                      </p>
-                    )}
-                    <p className="text-muted-foreground">
-                      {channel.description}
-                    </p>
-                    {channel.category && (
-                      <div className="mt-2">
-                        <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                          {channel.category}
-                        </span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+      {/* Auth Dialog for non-logged in users */}
+      <AuthDialog
+        open={authDialogOpen}
+        onOpenChange={setAuthDialogOpen}
+        description="You need to be logged in to view channel details."
+      />
 
-              <div className="flex gap-2">
-                {isOwner &&
-                  (isEditing ? (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="default"
-                        onClick={handleSaveChanges}
-                        disabled={updateChannelMutation.isPending}
-                      >
-                        {updateChannelMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <Check className="h-4 w-4 mr-2" />
-                        )}
-                        Save
-                      </Button>
-                      <Button variant="outline" onClick={handleCancelEdit}>
-                        <X className="h-4 w-4 mr-2" />
-                        Cancel
-                      </Button>
+      {/* Only show channel content to logged in users */}
+      {user && (
+        <div className="container mx-auto px-4 py-6">
+          <div className="grid lg:grid-cols-[2fr_1fr] gap-8">
+            <div>
+              <div className="flex justify-between items-start mb-8">
+                <div>
+                  {isEditing ? (
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="channel-name">Channel Name</Label>
+                        <Input
+                          id="channel-name"
+                          type="text"
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          className="max-w-md"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="channel-description">Description</Label>
+                        <Textarea
+                          id="channel-description"
+                          value={editedDescription}
+                          onChange={(e) => setEditedDescription(e.target.value)}
+                          className="max-w-md"
+                          rows={3}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="channel-category">
+                          Category (optional)
+                        </Label>
+                        <Input
+                          id="channel-category"
+                          type="text"
+                          value={editedCategory}
+                          onChange={(e) => setEditedCategory(e.target.value)}
+                          className="max-w-md"
+                          placeholder="e.g. Technology, Sports, News"
+                        />
+                      </div>
                     </div>
                   ) : (
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsEditing(true)}
-                    >
-                      <Pencil className="h-4 w-4 mr-2" />
-                      Edit Channel
-                    </Button>
-                  ))}
+                    <>
+                      <h1 className="text-4xl font-bold mb-2">
+                        {channel.name}
+                      </h1>
+                      {channel.created_at && (
+                        <p className="text-sm text-muted-foreground mb-2">
+                          Created on {formatDate(channel.created_at)}
+                        </p>
+                      )}
+                      <p className="text-muted-foreground">
+                        {channel.description}
+                      </p>
+                      {channel.category && (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                            {channel.category}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
 
-                {!isOwner && user && !isEditing && (
-                  <Button
-                    variant={isSubscribed ? "outline" : "default"}
-                    onClick={() =>
-                      isSubscribed
-                        ? unsubscribeMutation.mutate()
-                        : subscribeMutation.mutate()
-                    }
-                    disabled={
-                      subscribeMutation.isPending ||
-                      unsubscribeMutation.isPending
-                    }
-                  >
-                    {isSubscribed ? "Unsubscribe" : "Subscribe"}
-                  </Button>
+                <div className="flex gap-2">
+                  {isOwner &&
+                    (isEditing ? (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="default"
+                          onClick={handleSaveChanges}
+                          disabled={updateChannelMutation.isPending}
+                        >
+                          {updateChannelMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <Check className="h-4 w-4 mr-2" />
+                          )}
+                          Save
+                        </Button>
+                        <Button variant="outline" onClick={handleCancelEdit}>
+                          <X className="h-4 w-4 mr-2" />
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsEditing(true)}
+                      >
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Edit Channel
+                      </Button>
+                    ))}
+
+                  {!isOwner && user && !isEditing && (
+                    <Button
+                      variant={isSubscribed ? "outline" : "default"}
+                      onClick={() =>
+                        isSubscribed
+                          ? unsubscribeMutation.mutate()
+                          : subscribeMutation.mutate()
+                      }
+                      disabled={
+                        subscribeMutation.isPending ||
+                        unsubscribeMutation.isPending
+                      }
+                    >
+                      {isSubscribed ? "Unsubscribe" : "Subscribe"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">Articles</h2>
+                {isOwner && (
+                  <div className="flex items-center gap-2">
+                    <Link href={`/channels/${id}/articles/new`}>
+                      <Button variant="default">
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        New Article
+                      </Button>
+                    </Link>
+                  </div>
                 )}
               </div>
-            </div>
 
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Articles</h2>
-              {isOwner && (
-                <div className="flex items-center gap-2">
-                  <Link href={`/channels/${id}/articles/new`}>
-                    <Button variant="default">
-                      <PlusCircle className="h-4 w-4 mr-2" />
-                      New Article
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            <Tabs
-              value={activeTab}
-              onValueChange={setActiveTab}
-              className="w-full"
-            >
-              <TabsList>
-                <TabsTrigger value="published">Published</TabsTrigger>
-                {isOwner && <TabsTrigger value="drafts">Drafts</TabsTrigger>}
-              </TabsList>
-
-              <TabsContent
-                value="published"
-                className="rounded-lg border bg-card mt-2"
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full"
               >
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort("title")}
-                        >
-                          Title
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort("category")}
-                        >
-                          Category
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
-                      <TableHead>
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleSort("createdAt")}
-                        >
-                          Date
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        </Button>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sortedArticles?.map((article) => (
-                      <TableRow key={article.id}>
-                        <TableCell>
-                          <a
-                            href={`/articles/${article.id}`}
-                            className="hover:underline text-primary"
-                          >
-                            {article.title}
-                          </a>
-                        </TableCell>
-                        <TableCell>{article.category}</TableCell>
-                        <TableCell>
-                          {formatDate(article.createdAt || article.created_at)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {!sortedArticles?.length && (
-                      <TableRow>
-                        <TableCell colSpan={3} className="h-24 text-center">
-                          No articles published yet
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TabsContent>
+                <TabsList>
+                  <TabsTrigger value="published">Published</TabsTrigger>
+                  {isOwner && <TabsTrigger value="drafts">Drafts</TabsTrigger>}
+                </TabsList>
 
-              {isOwner && (
                 <TabsContent
-                  value="drafts"
+                  value="published"
                   className="rounded-lg border bg-card mt-2"
                 >
                   <Table>
@@ -535,7 +490,7 @@ export default function ChannelPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {sortedDrafts?.map((article) => (
+                      {sortedArticles?.map((article) => (
                         <TableRow key={article.id}>
                           <TableCell>
                             <a
@@ -553,81 +508,153 @@ export default function ChannelPage() {
                           </TableCell>
                         </TableRow>
                       ))}
-                      {!sortedDrafts?.length && (
+                      {!sortedArticles?.length && (
                         <TableRow>
                           <TableCell colSpan={3} className="h-24 text-center">
-                            No draft articles
+                            No articles published yet
                           </TableCell>
                         </TableRow>
                       )}
                     </TableBody>
                   </Table>
                 </TabsContent>
-              )}
-            </Tabs>
-          </div>
 
-          <div className="space-y-6">
-            <div className="rounded-lg border bg-card p-6">
-              <h2 className="text-xl font-semibold mb-4">Channel Stats</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-2xl font-bold">
-                    {articles?.length || 0}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Articles</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold">
-                    {channel?.subscriberCount || 0}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Subscribers
-                  </div>
-                </div>
-                <div className="col-span-2 mt-3 border-t pt-3">
-                  <div className="text-sm mt-2">
-                    <span className="text-muted-foreground">Created by</span>{" "}
-                    <Link
-                      href={`/profile`}
-                      className="text-primary hover:underline font-medium"
-                    >
-                      {ownerInfo?.username ||
-                        `User #${
-                          channel?.user_id || channel?.userId || "unknown"
-                        }`}
-                    </Link>
-                  </div>
-                  <div className="text-sm mt-1">
-                    <span className="text-muted-foreground">
-                      Creation date:
-                    </span>{" "}
-                    <span className="font-medium">
-                      {channel && channel.created_at
-                        ? formatDate(channel.created_at)
-                        : "Not available"}
-                    </span>
-                  </div>
-                </div>
-              </div>
+                {isOwner && (
+                  <TabsContent
+                    value="drafts"
+                    className="rounded-lg border bg-card mt-2"
+                  >
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>
+                            <Button
+                              variant="ghost"
+                              onClick={() => handleSort("title")}
+                            >
+                              Title
+                              <ArrowUpDown className="ml-2 h-4 w-4" />
+                            </Button>
+                          </TableHead>
+                          <TableHead>
+                            <Button
+                              variant="ghost"
+                              onClick={() => handleSort("category")}
+                            >
+                              Category
+                              <ArrowUpDown className="ml-2 h-4 w-4" />
+                            </Button>
+                          </TableHead>
+                          <TableHead>
+                            <Button
+                              variant="ghost"
+                              onClick={() => handleSort("createdAt")}
+                            >
+                              Date
+                              <ArrowUpDown className="ml-2 h-4 w-4" />
+                            </Button>
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sortedDrafts?.map((article) => (
+                          <TableRow key={article.id}>
+                            <TableCell>
+                              <a
+                                href={`/articles/${article.id}`}
+                                className="hover:underline text-primary"
+                              >
+                                {article.title}
+                              </a>
+                            </TableCell>
+                            <TableCell>{article.category}</TableCell>
+                            <TableCell>
+                              {formatDate(
+                                article.createdAt || article.created_at
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {!sortedDrafts?.length && (
+                          <TableRow>
+                            <TableCell colSpan={3} className="h-24 text-center">
+                              No draft articles
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TabsContent>
+                )}
+              </Tabs>
             </div>
 
-            {isOwner && (
+            <div className="space-y-6">
               <div className="rounded-lg border bg-card p-6">
-                <h2 className="text-xl font-semibold mb-4">Channel Settings</h2>
-                <div className="space-y-2">
-                  <Button className="w-full" variant="outline">
-                    Manage Subscribers
-                  </Button>
-                  <Button className="w-full" variant="outline">
-                    Channel Analytics
-                  </Button>
+                <h2 className="text-xl font-semibold mb-4">Channel Stats</h2>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-2xl font-bold">
+                      {articles?.length || 0}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Articles
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">
+                      {channel?.subscriberCount || 0}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Subscribers
+                    </div>
+                  </div>
+                  <div className="col-span-2 mt-3 border-t pt-3">
+                    <div className="text-sm mt-2">
+                      <span className="text-muted-foreground">Created by</span>{" "}
+                      <Link
+                        href={`/profile`}
+                        className="text-primary hover:underline font-medium"
+                      >
+                        {ownerInfo?.username ||
+                          `User #${
+                            channel?.user_id || channel?.userId || "unknown"
+                          }`}
+                      </Link>
+                    </div>
+                    <div className="text-sm mt-1">
+                      <span className="text-muted-foreground">
+                        Creation date:
+                      </span>{" "}
+                      <span className="font-medium">
+                        {channel && channel.created_at
+                          ? formatDate(channel.created_at)
+                          : "Not available"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            )}
+
+              {isOwner && (
+                <div className="rounded-lg border bg-card p-6">
+                  <h2 className="text-xl font-semibold mb-4">
+                    Channel Settings
+                  </h2>
+                  <div className="space-y-2">
+                    <Button className="w-full" variant="outline">
+                      Manage Subscribers
+                    </Button>
+                    <Button className="w-full" variant="outline">
+                      Channel Analytics
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

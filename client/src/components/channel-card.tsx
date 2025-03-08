@@ -6,10 +6,15 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { Users } from "lucide-react";
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { AuthDialog } from "./auth-dialog";
 
 export function ChannelCard({ channel }: { channel: Channel }) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
 
   const subscribeMutation = useMutation({
     mutationFn: async () => {
@@ -43,36 +48,62 @@ export function ChannelCard({ channel }: { channel: Channel }) {
     },
   });
 
+  const handleCardClick = () => {
+    if (user) {
+      navigate(`/channels/${channel.id}`);
+    } else {
+      setAuthDialogOpen(true);
+    }
+  };
+
+  const handleSubscribe = () => {
+    if (user) {
+      subscribeMutation.mutate();
+    } else {
+      setAuthDialogOpen(true);
+    }
+  };
+
   return (
-    <Card className="mb-4">
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold">{channel.name}</h3>
-          <Users className="h-4 w-4 text-muted-foreground" />
-        </div>
-      </CardHeader>
+    <>
+      <Card
+        className="mb-4 cursor-pointer hover:shadow-md transition-shadow"
+        onClick={handleCardClick}
+      >
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">{channel.name}</h3>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </div>
+        </CardHeader>
 
-      <CardContent>
-        {channel.description && (
-          <p className="text-sm text-muted-foreground mb-4">
-            {channel.description}
-          </p>
-        )}
+        <CardContent>
+          {channel.description && (
+            <p className="text-sm text-muted-foreground mb-4">
+              {channel.description}
+            </p>
+          )}
 
-        {user && user.id !== channel.userId && (
           <Button
             variant="outline"
             size="sm"
             className="w-full"
-            onClick={() => subscribeMutation.mutate()}
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent card click event
+              handleSubscribe();
+            }}
             disabled={
-              subscribeMutation.isPending || unsubscribeMutation.isPending
+              user && user.id !== channel.userId
+                ? subscribeMutation.isPending || unsubscribeMutation.isPending
+                : false
             }
           >
             Subscribe
           </Button>
-        )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      <AuthDialog open={authDialogOpen} onOpenChange={setAuthDialogOpen} />
+    </>
   );
 }

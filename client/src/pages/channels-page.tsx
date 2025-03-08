@@ -35,6 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { AuthDialog } from "@/components/auth-dialog";
 
 // Define ordering options
 type OrderField = "createdAt" | "subscriberCount" | "articleCount";
