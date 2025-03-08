@@ -8,11 +8,25 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Newspaper, LogOut, ChevronDown, PlusCircle } from "lucide-react";
+import {
+  Newspaper,
+  LogOut,
+  ChevronDown,
+  PlusCircle,
+  Menu,
+  Users,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Channel } from "@shared/schema";
 import { useEffect } from "react";
 import { useSelectedChannel } from "@/hooks/use-selected-channel";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 
 export function NavigationBar({
   hideAuthButtons = false,
@@ -25,6 +39,12 @@ export function NavigationBar({
   const [location, setLocation] = useLocation();
   const { selectedChannelId: contextChannelId, setSelectedChannelId } =
     useSelectedChannel();
+
+  // Get popular channels for mobile menu
+  const { data: popularChannels } = useQuery<Channel[]>({
+    queryKey: ["/api/channels"],
+    enabled: true,
+  });
 
   // Use the prop value if provided (for explicit page-level control), otherwise use the context value
   const effectiveChannelId =
@@ -100,13 +120,81 @@ export function NavigationBar({
   return (
     <header className="border-b">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <button
-          onClick={() => setLocation("/")}
-          className="flex items-center gap-2 cursor-pointer"
-        >
-          <Newspaper className="h-6 w-6" />
-          <span className="font-bold text-lg">NewsPlatform</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Hamburger menu for mobile */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="lg:hidden">
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left">
+              <SheetHeader>
+                <SheetTitle>Menu</SheetTitle>
+              </SheetHeader>
+              <div className="py-4">
+                <div className="pb-4">
+                  <Link href="/" className="flex items-center gap-2 py-2">
+                    <Newspaper className="h-5 w-5" />
+                    <span>Home</span>
+                  </Link>
+                </div>
+
+                {user && (
+                  <div className="pb-4">
+                    <Link
+                      href="/profile"
+                      className="flex items-center gap-2 py-2"
+                    >
+                      <span>Profile</span>
+                    </Link>
+                  </div>
+                )}
+
+                {/* Popular Channels Section for Mobile */}
+                <div className="pt-4 border-t">
+                  <h3 className="font-medium flex items-center gap-2 mb-2">
+                    <Users className="h-5 w-5" />
+                    Popular Channels
+                  </h3>
+                  <div className="pl-7 space-y-2">
+                    {popularChannels?.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No channels available
+                      </p>
+                    ) : (
+                      <>
+                        {popularChannels?.slice(0, 5).map((channel) => (
+                          <Link
+                            key={channel.id}
+                            href={`/channels/${channel.id}`}
+                            className="block py-1 text-sm"
+                          >
+                            {channel.name}
+                          </Link>
+                        ))}
+                        <Link
+                          href="/channels"
+                          className="block py-1 text-sm font-medium text-primary"
+                        >
+                          Browse All Channels
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <button
+            onClick={() => setLocation("/")}
+            className="flex items-center gap-2 cursor-pointer"
+          >
+            <Newspaper className="h-6 w-6" />
+            <span className="font-bold text-lg">NewsPlatform</span>
+          </button>
+        </div>
 
         <div className="flex items-center gap-4">
           {/* Show channel info if user has created at least one channel */}
