@@ -284,9 +284,13 @@ export default function HomePage() {
       <div className="container mx-auto p-4 lg:p-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold">Your Feed</h1>
+            <h1 className="text-4xl font-bold">
+              {user ? "Your Feed" : "Popular Articles"}
+            </h1>
             <p className="text-muted-foreground mt-2">
-              Latest articles from your favorite channels
+              {user
+                ? "Latest articles from your favorite channels"
+                : "Log in to see articles from your favorite channels"}
             </p>
           </div>
           <div className="flex items-center gap-3">
