@@ -617,7 +617,7 @@ export default function HomePage() {
           {/* Popular Channels section - 1/3 on large screens, hidden on smaller screens */}
           <div className="hidden lg:block space-y-6">
             <div className="pt-2">
-              <h2 className="text-xl font-semibold text-[1.05em]">
+              <h2 className="text-xl font-semibold text-[1.16em] font-[520]">
                 Popular Channels
               </h2>
             </div>

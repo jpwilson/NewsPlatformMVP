@@ -151,6 +151,44 @@ export function NavigationBar({
                   </div>
                 )}
 
+                {/* Display channel info in mobile menu if user has a channel */}
+                {displayedChannel && (
+                  <div className="pb-4">
+                    <div className="flex items-center gap-2 py-2">
+                      <span>
+                        Channel:{" "}
+                        <span className="font-medium">
+                          {displayedChannel.name}
+                        </span>
+                      </span>
+                    </div>
+                    {hasMultipleChannels && (
+                      <div className="pl-7 space-y-2 mt-1">
+                        {userChannels?.map((channel) => (
+                          <div
+                            key={channel.id}
+                            className={`text-sm py-1 cursor-pointer ${
+                              channel.id === effectiveChannelId
+                                ? "font-medium"
+                                : ""
+                            }`}
+                            onClick={() => navigateToChannel(channel.id)}
+                          >
+                            {channel.name}
+                          </div>
+                        ))}
+                        <Link
+                          href="/channels/new"
+                          className="text-sm py-1 flex items-center gap-1 text-primary"
+                        >
+                          <PlusCircle className="h-3 w-3" />
+                          Create Channel
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Popular Channels Section for Mobile */}
                 <div className="pt-4 border-t">
                   <h3 className="font-medium flex items-center gap-2 mb-2">
