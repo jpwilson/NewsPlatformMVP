@@ -282,216 +282,228 @@ export default function HomePage() {
       <NavigationBar selectedChannelId={selectedChannelId} />
 
       <div className="container mx-auto p-4 lg:p-8">
-        {/* Header section */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold">
-            {user ? "Your Feed" : "Popular Articles"}
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            {user
-              ? "Latest articles from your favorite channels"
-              : "Log in to see articles from your favorite channels"}
-          </p>
-        </div>
-
-        {/* Main content area with Articles and Channels */}
+        {/* Main content area with Articles and Channels - moved up to wrap headers too */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Articles section - takes up 2/3 on large screens */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Article control buttons */}
-            <div className="flex justify-end items-center gap-3 mb-4">
-              {/* Order Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="gap-2">
-                    <SlidersHorizontal className="h-4 w-4" />
-                    Sort
-                    {orderDirection === "asc" ? (
-                      <ChevronUp className="h-3 w-3" />
-                    ) : (
-                      <ChevronDown className="h-3 w-3" />
-                    )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>Sort Articles By</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioGroup
-                    value={orderField}
-                    onValueChange={(value) =>
-                      setOrderField(value as OrderField)
-                    }
-                  >
-                    <DropdownMenuRadioItem value="createdAt">
-                      Published Date
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="viewCount">
-                      View Count
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="comments">
-                      Comment Count
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="likes">
-                      Likes
-                    </DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="dislikes">
-                      Dislikes
-                    </DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={toggleDirection}>
-                    {orderDirection === "asc" ? "Ascending ↑" : "Descending ↓"}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+          {/* Articles section with header - takes up 2/3 on large screens */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Header section */}
+            <div>
+              <h1 className="text-4xl font-bold">
+                {user ? "Your Feed" : "Popular Articles"}
+              </h1>
+              <div className="flex justify-between items-center mt-2">
+                <p className="text-muted-foreground">
+                  {user
+                    ? "Latest articles from your favorite channels"
+                    : "Log in to see articles from your favorite channels"}
+                </p>
 
-              {/* Filter Popover */}
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="gap-2 relative">
-                    <Filter className="h-4 w-4" />
-                    Filter
-                    {activeFilterCount > 0 && (
-                      <Badge
-                        className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center"
-                        variant="destructive"
-                      >
-                        {activeFilterCount}
-                      </Badge>
-                    )}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-80">
-                  <div className="space-y-4">
-                    <h4 className="font-medium">Filter Articles</h4>
-
-                    {/* Search */}
-                    <div className="space-y-2">
-                      <Label htmlFor="search">Search</Label>
-                      <div className="relative">
-                        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="search"
-                          placeholder="Search in title or content..."
-                          className="pl-8"
-                          value={searchTerm}
-                          onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Categories */}
-                    <div className="space-y-2">
-                      <Label>Categories</Label>
-                      <ScrollArea className="h-32">
-                        <div className="space-y-2">
-                          {availableCategories.map((category) => (
-                            <div
-                              key={category}
-                              className="flex items-center space-x-2"
-                            >
-                              <Checkbox
-                                id={`category-${category}`}
-                                checked={filterCategories.includes(category)}
-                                onCheckedChange={() => toggleCategory(category)}
-                              />
-                              <Label
-                                htmlFor={`category-${category}`}
-                                className="capitalize"
-                              >
-                                {category}
-                              </Label>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-
-                    {/* Locations */}
-                    {availableLocations.length > 0 && (
-                      <div className="space-y-2">
-                        <Label>Locations</Label>
-                        <ScrollArea className="h-32">
-                          <div className="space-y-2">
-                            {availableLocations.map((location) => (
-                              <div
-                                key={location}
-                                className="flex items-center space-x-2"
-                              >
-                                <Checkbox
-                                  id={`location-${location}`}
-                                  checked={filterLocations.includes(location)}
-                                  onCheckedChange={() =>
-                                    toggleLocation(location)
-                                  }
-                                />
-                                <Label htmlFor={`location-${location}`}>
-                                  {location}
-                                </Label>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      </div>
-                    )}
-
-                    {/* Channels */}
-                    {channels && channels.length > 0 && (
-                      <div className="space-y-2">
-                        <Label>Channels</Label>
-                        <ScrollArea className="h-32">
-                          <div className="space-y-2">
-                            {channels.map((channel) => (
-                              <div
-                                key={channel.id}
-                                className="flex items-center space-x-2"
-                              >
-                                <Checkbox
-                                  id={`channel-${channel.id}`}
-                                  checked={filterChannels.includes(channel.id)}
-                                  onCheckedChange={() =>
-                                    toggleChannel(channel.id)
-                                  }
-                                />
-                                <Label htmlFor={`channel-${channel.id}`}>
-                                  {channel.name}
-                                </Label>
-                              </div>
-                            ))}
-                          </div>
-                        </ScrollArea>
-                      </div>
-                    )}
-
-                    {/* Clear filters button */}
-                    {activeFilterCount > 0 && (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={clearFilters}
-                      >
-                        Clear All Filters
+                {/* Article control buttons - now contained in article column */}
+                <div className="flex items-center gap-3">
+                  {/* Order Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="gap-2">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Sort
+                        {orderDirection === "asc" ? (
+                          <ChevronUp className="h-3 w-3" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3" />
+                        )}
                       </Button>
-                    )}
-                  </div>
-                </PopoverContent>
-              </Popover>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel>Sort Articles By</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuRadioGroup
+                        value={orderField}
+                        onValueChange={(value) =>
+                          setOrderField(value as OrderField)
+                        }
+                      >
+                        <DropdownMenuRadioItem value="createdAt">
+                          Published Date
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="viewCount">
+                          View Count
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="comments">
+                          Comment Count
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="likes">
+                          Likes
+                        </DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="dislikes">
+                          Dislikes
+                        </DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={toggleDirection}>
+                        {orderDirection === "asc"
+                          ? "Ascending ↑"
+                          : "Descending ↓"}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
-              {/* Write Article Button */}
-              {user && (
-                <Link
-                  href={
-                    selectedChannelId
-                      ? `/channels/${selectedChannelId}/articles/new`
-                      : "/articles/new"
-                  }
-                >
-                  <Button>
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Write an Article
-                  </Button>
-                </Link>
-              )}
+                  {/* Filter Popover */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="gap-2 relative">
+                        <Filter className="h-4 w-4" />
+                        Filter
+                        {activeFilterCount > 0 && (
+                          <Badge
+                            className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center"
+                            variant="destructive"
+                          >
+                            {activeFilterCount}
+                          </Badge>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-80">
+                      <div className="space-y-4">
+                        <h4 className="font-medium">Filter Articles</h4>
+
+                        {/* Search */}
+                        <div className="space-y-2">
+                          <Label htmlFor="search">Search</Label>
+                          <div className="relative">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              id="search"
+                              placeholder="Search in title or content..."
+                              className="pl-8"
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Categories */}
+                        <div className="space-y-2">
+                          <Label>Categories</Label>
+                          <ScrollArea className="h-32">
+                            <div className="space-y-2">
+                              {availableCategories.map((category) => (
+                                <div
+                                  key={category}
+                                  className="flex items-center space-x-2"
+                                >
+                                  <Checkbox
+                                    id={`category-${category}`}
+                                    checked={filterCategories.includes(
+                                      category
+                                    )}
+                                    onCheckedChange={() =>
+                                      toggleCategory(category)
+                                    }
+                                  />
+                                  <Label
+                                    htmlFor={`category-${category}`}
+                                    className="capitalize"
+                                  >
+                                    {category}
+                                  </Label>
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </div>
+
+                        {/* Locations */}
+                        {availableLocations.length > 0 && (
+                          <div className="space-y-2">
+                            <Label>Locations</Label>
+                            <ScrollArea className="h-32">
+                              <div className="space-y-2">
+                                {availableLocations.map((location) => (
+                                  <div
+                                    key={location}
+                                    className="flex items-center space-x-2"
+                                  >
+                                    <Checkbox
+                                      id={`location-${location}`}
+                                      checked={filterLocations.includes(
+                                        location
+                                      )}
+                                      onCheckedChange={() =>
+                                        toggleLocation(location)
+                                      }
+                                    />
+                                    <Label htmlFor={`location-${location}`}>
+                                      {location}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        )}
+
+                        {/* Channels */}
+                        {channels && channels.length > 0 && (
+                          <div className="space-y-2">
+                            <Label>Channels</Label>
+                            <ScrollArea className="h-32">
+                              <div className="space-y-2">
+                                {channels.map((channel) => (
+                                  <div
+                                    key={channel.id}
+                                    className="flex items-center space-x-2"
+                                  >
+                                    <Checkbox
+                                      id={`channel-${channel.id}`}
+                                      checked={filterChannels.includes(
+                                        channel.id
+                                      )}
+                                      onCheckedChange={() =>
+                                        toggleChannel(channel.id)
+                                      }
+                                    />
+                                    <Label htmlFor={`channel-${channel.id}`}>
+                                      {channel.name}
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
+                          </div>
+                        )}
+
+                        {/* Clear filters button */}
+                        {activeFilterCount > 0 && (
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={clearFilters}
+                          >
+                            Clear All Filters
+                          </Button>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* Write Article Button */}
+                  {user && (
+                    <Link
+                      href={
+                        selectedChannelId
+                          ? `/channels/${selectedChannelId}/articles/new`
+                          : "/articles/new"
+                      }
+                    >
+                      <Button>
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Write an Article
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Display active filters */}
@@ -604,7 +616,12 @@ export default function HomePage() {
 
           {/* Popular Channels section - 1/3 on large screens, hidden on smaller screens */}
           <div className="hidden lg:block space-y-6">
-            <h2 className="text-xl font-semibold mb-4">Popular Channels</h2>
+            <div className="pt-2">
+              <h2 className="text-xl font-semibold text-[1.05em]">
+                Popular Channels
+              </h2>
+            </div>
+
             {loadingChannels ? (
               <div className="flex justify-center p-4">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
