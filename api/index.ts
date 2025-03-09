@@ -75,15 +75,35 @@ export default async function handler(
 ) {
   console.log(`API request: ${req.method} ${req.url}`);
   
+  // Ensure CORS is properly handled
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Handle OPTIONS pre-flight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
   // Forward to express app
   return new Promise((resolve) => {
-    // Create a custom middleware to handle the request
-    const handleRequest = (req: any, res: any) => {
-      app(req, res, () => {
-        resolve(undefined);
+    try {
+      // Create a custom middleware to handle the request
+      const handleRequest = (req: any, res: any) => {
+        app(req, res, () => {
+          resolve(undefined);
+        });
+      };
+      
+      handleRequest(req, res);
+    } catch (error) {
+      console.error('Error handling API request:', error);
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: error instanceof Error ? error.message : 'Unknown error'
       });
-    };
-    
-    handleRequest(req, res);
+      resolve(undefined);
+    }
   });
 } 
