@@ -12,13 +12,22 @@ let supabase: ReturnType<typeof createClient> | null = null;
 
 try {
   if (supabaseUrl && supabaseKey) {
-    console.log('Attempting to initialize Supabase client with URL:', supabaseUrl.substring(0, 15) + '...');
+    console.log(`Attempting to initialize Supabase client with URL: ${supabaseUrl.substring(0, 8)}...`);
+    
+    // Use Supabase's REST API instead of direct database connections
     supabase = createClient(supabaseUrl, supabaseKey, {
       auth: {
-        persistSession: false, // Don't persist session in serverless environment
+        persistSession: false,
         autoRefreshToken: false,
       },
+      global: {
+        // Set database-related options
+        headers: {
+          // Add any custom headers required for your setup
+        },
+      },
     });
+    
     console.log('Supabase client initialized successfully');
   } else {
     console.error('Supabase URL or key missing - check Vercel environment variables');

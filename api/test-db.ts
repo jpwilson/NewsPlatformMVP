@@ -18,6 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 1. Check if environment variables exist
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+  const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
   
   if (!supabaseUrl || !supabaseKey) {
     return res.status(500).json({
@@ -25,7 +26,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: 'Missing environment variables',
       variables: {
         SUPABASE_URL: !!supabaseUrl,
-        SUPABASE_SERVICE_KEY: !!supabaseKey
+        SUPABASE_SERVICE_KEY: !!supabaseKey,
+        VITE_SUPABASE_ANON_KEY: !!supabaseAnonKey
       },
       allEnvKeys: Object.keys(process.env).filter(key => 
         !key.includes('TOKEN') && 
@@ -36,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   
   let supabase: ReturnType<typeof createClient>;
+  const results: any[] = [];
   
   try {
     // 2. Create Supabase client
@@ -47,35 +50,100 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
     
-    // 3. Test with a simple query
-    console.log('Testing connection with query');
-    const { data, error } = await supabase.from('channels').select('count');
+    // 3. Test with multiple queries to diagnose different issues
     
-    if (error) {
-      console.error('Database query error:', error);
-      return res.status(500).json({
+    // Test 1: Simple health check
+    console.log('Test 1: Basic health check');
+    try {
+      const { data: healthData, error: healthError } = await supabase.from('channels').select('count');
+      results.push({
+        test: 'Basic health check',
+        success: !healthError,
+        error: healthError ? healthError.message : null,
+        data: healthData
+      });
+      
+      if (healthError) {
+        console.error('Health check failed:', healthError);
+      }
+    } catch (error) {
+      console.error('Health check threw exception:', error);
+      results.push({
+        test: 'Basic health check',
         success: false,
-        error: 'Database query failed',
-        details: error,
-        connectionDetails: {
-          supabaseUrlProvided: !!supabaseUrl,
-          supabaseKeyProvided: !!supabaseKey,
-          supabaseUrlLength: supabaseUrl?.length || 0,
-          supabaseKeyLength: supabaseKey?.length || 0
-        }
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
     
-    // 4. Return success
-    const duration = Date.now() - startTime;
-    console.log(`Database connection test successful (${duration}ms)`);
+    // Test 2: Test authenticated access
+    console.log('Test 2: Auth check');
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getSession();
+      results.push({
+        test: 'Auth check',
+        success: !authError,
+        error: authError ? authError.message : null,
+        data: authData ? 'Session data (redacted)' : null
+      });
+      
+      if (authError) {
+        console.error('Auth check failed:', authError);
+      }
+    } catch (error) {
+      console.error('Auth check threw exception:', error);
+      results.push({
+        test: 'Auth check',
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
     
-    return res.status(200).json({
-      success: true,
-      message: 'Successfully connected to Supabase',
-      data,
+    // Test 3: Test read access
+    console.log('Test 3: Read access');
+    try {
+      // Try to read channels (should be public)
+      const { data: channelsData, error: channelsError } = await supabase
+        .from('channels')
+        .select('*')
+        .limit(1);
+      
+      results.push({
+        test: 'Read access to channels',
+        success: !channelsError && Array.isArray(channelsData),
+        error: channelsError ? channelsError.message : null,
+        data: channelsData ? `Found ${channelsData.length} channels` : null
+      });
+      
+      if (channelsError) {
+        console.error('Channels read access failed:', channelsError);
+      }
+    } catch (error) {
+      console.error('Read access threw exception:', error);
+      results.push({
+        test: 'Read access to channels',
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+    
+    // 4. Return all results
+    const duration = Date.now() - startTime;
+    console.log(`Database tests completed in ${duration}ms`);
+    
+    const overallSuccess = results.every(r => r.success);
+    
+    return res.status(overallSuccess ? 200 : 500).json({
+      success: overallSuccess,
+      message: overallSuccess 
+        ? 'All Supabase tests passed' 
+        : 'Some Supabase tests failed - see results for details',
+      results,
       region: process.env.VERCEL_REGION || 'unknown',
-      duration: `${duration}ms`
+      duration: `${duration}ms`,
+      environment: {
+        nodeEnv: process.env.NODE_ENV,
+        vercelEnv: process.env.VERCEL_ENV
+      }
     });
     
   } catch (error) {
