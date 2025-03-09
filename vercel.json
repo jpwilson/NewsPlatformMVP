@@ -19,6 +19,14 @@
             "dest": "/api/index.ts"
         },
         {
+            "src": "/assets/(.*)",
+            "dest": "/assets/$1"
+        },
+        {
+            "src": "/(.*\\.(js|css|ico|png|jpg|svg|json))",
+            "dest": "/$1"
+        },
+        {
             "src": "/(.*)",
             "dest": "/index.html"
         }

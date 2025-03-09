@@ -1,5 +1,18 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+// Determine API base URL for different environments
+export const API_BASE_URL = getApiBaseUrl();
+
+function getApiBaseUrl() {
+  // In production (Vercel), API requests go to the same host
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return '';
+  }
+  
+  // In development, requests go to localhost:5001
+  return 'http://localhost:5001';
+}
+
 export async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -23,7 +36,10 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  // Add API_BASE_URL if the URL doesn't already include http
+  const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+  
+  const res = await fetch(fullUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,

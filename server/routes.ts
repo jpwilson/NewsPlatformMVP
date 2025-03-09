@@ -809,17 +809,12 @@ export async function registerRoutes(app: Express): Promise<void> {
   // Get categories
   app.get("/api/categories", async (req, res) => {
     try {
-      // Fetch all categories from the database
-      const { data: categories, error } = await supabase
-        .from("categories")
-        .select("*")
-        .order("name");
-      
+      const { data: categories, error } = await supabase.from("categories").select("*").order("name");
       if (error) throw error;
-      
+
       // Transform into a hierarchical structure
-      const categoryMap = new Map();
-      const rootCategories = [];
+      const categoryMap = new Map<number, any>();
+      const rootCategories: any[] = [];
       
       // First pass: create all category objects and store in map
       categories.forEach(category => {
@@ -852,17 +847,12 @@ export async function registerRoutes(app: Express): Promise<void> {
   // Get locations
   app.get("/api/locations", async (req, res) => {
     try {
-      // Fetch all locations from the database
-      const { data: locations, error } = await supabase
-        .from("locations")
-        .select("*")
-        .order("name");
-      
+      const { data: locations, error } = await supabase.from("locations").select("*").order("name");
       if (error) throw error;
-      
+
       // Transform into a hierarchical structure
-      const locationMap = new Map();
-      const rootLocations = [];
+      const locationMap = new Map<number, any>();
+      const rootLocations: any[] = [];
       
       // First pass: create all location objects and store in map
       locations.forEach(location => {
