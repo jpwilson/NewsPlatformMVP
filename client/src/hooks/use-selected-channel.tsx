@@ -29,7 +29,7 @@ export function SelectedChannelProvider({ children }: { children: ReactNode }) {
   >(undefined);
 
   // Get user's channels
-  const { data: userChannels } = useQuery<Channel[]>({
+  const { data: userChannels, isError: channelsError } = useQuery<Channel[]>({
     queryKey: ["/api/channels"],
     select: (channels) => channels?.filter((c) => c.userId === user?.id) || [],
     enabled: !!user,

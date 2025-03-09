@@ -56,6 +56,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isVercelDeployment) {
       console.info("Running on Vercel deployment - enabling guest mode");
       setIsGuestMode(true);
+
+      // Show toast notification to inform users
+      toast({
+        title: "Demo Mode Activated",
+        description:
+          "Using guest account for Vercel demo. Some features are limited.",
+        duration: 6000,
+      });
     }
   }, []);
 
