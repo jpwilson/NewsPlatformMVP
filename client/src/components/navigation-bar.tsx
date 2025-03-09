@@ -21,6 +21,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Channel } from "@shared/schema";
 import { useEffect, useState } from "react";
 import { useSelectedChannel } from "@/hooks/use-selected-channel";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Sheet,
   SheetContent,
@@ -154,6 +155,14 @@ export function NavigationBar({
                     >
                       <span>Profile</span>
                     </Link>
+                  </div>
+                )}
+
+                {/* Add theme toggle to mobile menu for logged-in users */}
+                {user && (
+                  <div className="pb-4 flex items-center gap-2 py-2">
+                    <span>Theme:</span>
+                    <ThemeToggle />
                   </div>
                 )}
 
@@ -298,26 +307,36 @@ export function NavigationBar({
           <nav>
             {!hideAuthButtons &&
               (user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="relative h-8 bg-background"
-                    >
-                      {user.username}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56" align="end" forceMount>
-                    <DropdownMenuItem asChild>
-                      <Link href="/profile">Profile</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Logout
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <>
+                  {/* Dark mode toggle - only shown for logged in users */}
+                  <div className="flex items-center gap-2">
+                    <ThemeToggle />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className="relative h-8 bg-background"
+                        >
+                          {user.username}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        className="w-56"
+                        align="end"
+                        forceMount
+                      >
+                        <DropdownMenuItem asChild>
+                          <Link href="/profile">Profile</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleLogout}>
+                          <LogOut className="h-4 w-4 mr-2" />
+                          Logout
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </>
               ) : (
                 <Link href="/auth">
                   <Button size="sm">Login</Button>

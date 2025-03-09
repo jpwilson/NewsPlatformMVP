@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider } from "@/hooks/use-auth";
 import { SelectedChannelProvider } from "@/hooks/use-selected-channel";
+import { ThemeProvider } from "@/hooks/use-theme";
 import { ProtectedRoute } from "./lib/protected-route";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
@@ -44,8 +45,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <SelectedChannelProvider>
-          <Router />
-          <Toaster />
+          <ThemeProvider defaultTheme="light">
+            <Router />
+            <Toaster />
+          </ThemeProvider>
         </SelectedChannelProvider>
       </AuthProvider>
     </QueryClientProvider>
