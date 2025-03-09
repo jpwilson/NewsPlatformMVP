@@ -10,4 +10,16 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  /* Dark mode customizations for better contrast */
+  .dark {
+    --primary: 210 40% 50%; /* Lighter blue for dark mode buttons */
+    --primary-foreground: 0 0% 100%; /* White text for better visibility */
+
+    --secondary: 215 25% 40%; /* Lighter secondary color for dark mode */
+    --secondary-foreground: 0 0% 100%;
+
+    --accent: 210 30% 30%; /* Accent color with better visibility */
+    --accent-foreground: 0 0% 98%;
+  }
 }

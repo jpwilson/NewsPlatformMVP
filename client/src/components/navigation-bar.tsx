@@ -113,6 +113,14 @@ export function NavigationBar({
   }, [selectedChannel, displayedChannel]);
 
   const handleLogout = () => {
+    // Reset theme appearance to light mode on logout, but don't clear the preference
+    const root = window.document.documentElement;
+    root.classList.remove("dark");
+    root.classList.add("light");
+
+    // Don't clear theme preference so it persists for next login
+    // localStorage.removeItem("newsPlatform-theme");
+
     logoutMutation.mutate();
     // Force redirect to the home page after logout
     setLocation("/");
