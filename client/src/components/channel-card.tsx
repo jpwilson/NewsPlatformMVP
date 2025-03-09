@@ -10,7 +10,13 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { AuthDialog } from "./auth-dialog";
 
-export function ChannelCard({ channel }: { channel: Channel }) {
+// Extended Channel type that includes subscriberCount
+type ExtendedChannel = Channel & {
+  subscriberCount?: number;
+  subscriber_count?: number;
+};
+
+export function ChannelCard({ channel }: { channel: ExtendedChannel }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -64,6 +70,11 @@ export function ChannelCard({ channel }: { channel: Channel }) {
     }
   };
 
+  // Get subscriber count from multiple possible properties
+  const getSubscriberCount = () => {
+    return channel.subscriberCount ?? channel.subscriber_count ?? 0;
+  };
+
   return (
     <>
       <Card
@@ -73,7 +84,10 @@ export function ChannelCard({ channel }: { channel: Channel }) {
         <CardHeader className="pb-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">{channel.name}</h3>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span className="text-sm">{getSubscriberCount()}</span>
+            </div>
           </div>
         </CardHeader>
 

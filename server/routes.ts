@@ -84,8 +84,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/channels", async (req, res) => {
-    const channels = await storage.listChannels();
-    res.json(channels);
+    try {
+      // Fetch all channels first using storage
+      const channels = await storage.listChannels();
+      
+      // Enrich each channel with subscriber count
+      const enrichedChannels = await Promise.all(channels.map(async (channel) => {
+        // Get subscriber count
+        const { count, error: countError } = await supabase
+          .from("subscriptions")
+          .select("*", { count: 'exact', head: true })
+          .eq("channel_id", channel.id);
+          
+        if (countError) {
+          console.error(`Error fetching subscriber count for channel ${channel.id}:`, countError);
+        }
+        
+        return {
+          ...channel,
+          subscriberCount: count || 0
+        };
+      }));
+      
+      res.json(enrichedChannels || []);
+    } catch (error) {
+      console.error("Error fetching channels:", error);
+      res.status(500).json({ error: "Failed to fetch channels" });
+    }
   });
 
   app.get("/api/channels/:id", async (req, res) => {

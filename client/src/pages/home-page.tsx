@@ -279,7 +279,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavigationBar selectedChannelId={selectedChannelId} />
+      <NavigationBar selectedChannelId={user ? selectedChannelId : undefined} />
 
       <div className="container mx-auto p-4 lg:p-8">
         {/* Main content area with Articles and Channels - moved up to wrap headers too */}

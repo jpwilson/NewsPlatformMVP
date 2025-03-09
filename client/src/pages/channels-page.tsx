@@ -44,6 +44,7 @@ type OrderDirection = "asc" | "desc";
 // Define a more flexible type for channel that accommodates both camelCase and snake_case
 type ChannelWithStats = Channel & {
   created_at?: string | Date;
+  subscriberCount?: number;
   subscriber_count?: number;
   article_count?: number;
   _count?: {
@@ -124,8 +125,16 @@ export default function ChannelsPage() {
           aValue = new Date(a.created_at || 0).getTime();
           bValue = new Date(b.created_at || 0).getTime();
         } else if (orderField === "subscriberCount") {
-          aValue = a.subscriber_count || a._count?.subscribers || 0;
-          bValue = b.subscriber_count || b._count?.subscribers || 0;
+          aValue =
+            a.subscriberCount ||
+            a.subscriber_count ||
+            a._count?.subscribers ||
+            0;
+          bValue =
+            b.subscriberCount ||
+            b.subscriber_count ||
+            b._count?.subscribers ||
+            0;
         } else if (orderField === "articleCount") {
           aValue = a.article_count || a._count?.articles || 0;
           bValue = b.article_count || b._count?.articles || 0;

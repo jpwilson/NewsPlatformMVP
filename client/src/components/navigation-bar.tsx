@@ -158,40 +158,47 @@ export function NavigationBar({
                 )}
 
                 {/* Display channel info in mobile menu if user has a channel */}
-                {displayedChannel && (
+                {user && displayedChannel && (
                   <div className="pb-4">
-                    <div className="flex items-center gap-2 py-2">
-                      <span>
-                        Channel:{" "}
-                        <span className="font-medium">
-                          {displayedChannel.name}
-                        </span>
-                      </span>
-                    </div>
-                    {hasMultipleChannels && (
-                      <div className="pl-7 space-y-2 mt-1">
-                        {userChannels?.map((channel) => (
-                          <div
-                            key={channel.id}
-                            className={`text-sm py-1 cursor-pointer ${
-                              channel.id === effectiveChannelId
-                                ? "font-medium"
-                                : ""
-                            }`}
-                            onClick={() => navigateToChannel(channel.id)}
-                          >
-                            {channel.name}
+                    <Collapsible defaultOpen={true}>
+                      <CollapsibleTrigger className="flex items-center justify-between w-full py-2">
+                        <div className="font-medium flex items-center gap-2">
+                          <span>
+                            Channel:{" "}
+                            <span className="font-medium">
+                              {displayedChannel.name}
+                            </span>
+                          </span>
+                        </div>
+                        <ChevronRight className="h-4 w-4 transition-transform duration-200 data-[state=open]:rotate-90" />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        {hasMultipleChannels && (
+                          <div className="pl-7 space-y-2 mt-1">
+                            {userChannels?.map((channel) => (
+                              <div
+                                key={channel.id}
+                                className={`text-sm py-1 cursor-pointer ${
+                                  channel.id === effectiveChannelId
+                                    ? "font-medium"
+                                    : ""
+                                }`}
+                                onClick={() => navigateToChannel(channel.id)}
+                              >
+                                {channel.name}
+                              </div>
+                            ))}
+                            <Link
+                              href="/channels/new"
+                              className="text-sm py-1 flex items-center gap-1 text-primary"
+                            >
+                              <PlusCircle className="h-3 w-3" />
+                              Create Channel
+                            </Link>
                           </div>
-                        ))}
-                        <Link
-                          href="/channels/new"
-                          className="text-sm py-1 flex items-center gap-1 text-primary"
-                        >
-                          <PlusCircle className="h-3 w-3" />
-                          Create Channel
-                        </Link>
-                      </div>
-                    )}
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
                   </div>
                 )}
 
@@ -222,18 +229,18 @@ export function NavigationBar({
                                 {channel.name}
                               </Link>
                             ))}
-                            <div className="mt-3">
-                              <Link href="/channels">
-                                <Button size="sm" className="w-full">
-                                  Explore Channels
-                                </Button>
-                              </Link>
-                            </div>
                           </>
                         )}
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
+                  <div className="mt-3 pl-7">
+                    <Link href="/channels">
+                      <Button size="sm" className="w-full">
+                        Explore Channels
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </div>
             </SheetContent>
@@ -249,8 +256,8 @@ export function NavigationBar({
         </div>
 
         <div className="flex items-center gap-4">
-          {/* Show channel info if user has created at least one channel */}
-          {displayedChannel && (
+          {/* Show channel info if user is logged in and has created at least one channel */}
+          {user && displayedChannel && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button

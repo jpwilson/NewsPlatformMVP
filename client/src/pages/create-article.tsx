@@ -68,7 +68,9 @@ export default function CreateArticle() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <NavigationBar selectedChannelId={currentChannelId} />
+        <NavigationBar
+          selectedChannelId={user ? currentChannelId : undefined}
+        />
         <div className="flex items-center justify-center h-[calc(100vh-64px)]">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -80,9 +82,24 @@ export default function CreateArticle() {
     return <Redirect to="/channels/new" />;
   }
 
+  if (!user) {
+    return (
+      <div>
+        <NavigationBar />
+        <div className="container mx-auto p-8 text-center">
+          <h1 className="text-4xl font-bold mb-8">Create Article</h1>
+          <ArticleEditor
+            channels={channels}
+            defaultChannelId={defaultChannelId}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background">
-      <NavigationBar selectedChannelId={currentChannelId} />
+    <div className="min-h-screen pb-16">
+      <NavigationBar selectedChannelId={user ? currentChannelId : undefined} />
 
       <div className="container mx-auto p-4 lg:p-8 max-w-4xl">
         <h1 className="text-4xl font-bold mb-8">Create Article</h1>
