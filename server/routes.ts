@@ -28,7 +28,7 @@ const insertChannelSchema = z.object({
   // Note: No 'id' required here since it will be auto-generated
 });
 
-export async function registerRoutes(app: Express): Promise<Server> {
+export async function registerRoutes(app: Express): Promise<void> {
   setupAuth(app);
 
   // Channels
@@ -1038,7 +1038,4 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to update view count" });
     }
   });
-
-  const httpServer = createServer(app);
-  return httpServer;
 }
