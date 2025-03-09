@@ -5,11 +5,19 @@ export const API_BASE_URL = getApiBaseUrl();
 
 function getApiBaseUrl() {
   // In production (Vercel), API requests go to the same host
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    
+    // For local development
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:5001';
+    }
+    
+    // For Vercel deployment
     return '';
   }
   
-  // In development, requests go to localhost:5001
+  // Fallback (this should rarely be used)
   return 'http://localhost:5001';
 }
 
@@ -37,7 +45,19 @@ export async function apiRequest(
   data?: unknown | undefined,
 ): Promise<Response> {
   // Add API_BASE_URL if the URL doesn't already include http
-  const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+  // And ensure it works properly in both environments
+  const isAbsoluteUrl = url.startsWith('http');
+  const isApiUrl = url.startsWith('/api/');
+  
+  let fullUrl = url;
+  if (!isAbsoluteUrl) {
+    if (isApiUrl) {
+      fullUrl = `${API_BASE_URL}${url}`;
+    } else {
+      // If it's not an API URL and not absolute, ensure it has a leading slash
+      fullUrl = url.startsWith('/') ? url : `/${url}`;
+    }
+  }
   
   const res = await fetch(fullUrl, {
     method,
