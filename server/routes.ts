@@ -240,7 +240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!channel) return res.status(404).json({ error: "Channel not found" });
       
       // Only the channel owner can see drafts
-      if (channel.user_id !== req.user!.id) {
+      if (channel.user_id !== req.user.id) {
         return res.status(403).json({ error: "You don't have permission to view drafts for this channel" });
       }
       
@@ -249,7 +249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from("articles")
         .select("*")
         .eq("channel_id", channelId)
-        .eq("status", "draft");
+        .eq("published", false);  // Only return draft articles
         
       if (error) throw error;
       

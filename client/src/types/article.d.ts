@@ -11,6 +11,8 @@ export type ArticleWithSnakeCase = Article & {
   user_id?: number;
   published_at?: string | Date;
   view_count?: number;
+  comment_count?: number;
+  like_count?: number;
   last_edited?: string | Date;
   
   // Additional fields from API responses
@@ -21,9 +23,12 @@ export type ArticleWithSnakeCase = Article & {
   likes?: number;
   dislikes?: number;
   viewCount?: number;
+  commentCount?: number;
+  likeCount?: number;
   userReaction?: boolean | null;
   _count?: {
     comments?: number;
+    likes?: number;
   };
   channel?: { 
     id: number; 

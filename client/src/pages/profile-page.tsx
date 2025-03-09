@@ -389,6 +389,20 @@ export default function ProfilePage() {
                         <TableRow>
                           <TableHead>Channel Name</TableHead>
                           <TableHead>Description</TableHead>
+                          <TableHead className="w-[8%] text-center">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center justify-center">
+                                    <Users className="h-4 w-4" />
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Number of subscribers</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -400,6 +414,9 @@ export default function ProfilePage() {
                             </TableCell>
                             <TableCell className="truncate max-w-[200px]">
                               {channel.description}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {(channel as any).subscriberCount || 0}
                             </TableCell>
                             <TableCell className="text-right">
                               <Link href={`/channels/${channel.id}`}>
