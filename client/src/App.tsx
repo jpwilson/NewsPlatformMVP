@@ -48,6 +48,37 @@ function App() {
           <ThemeProvider defaultTheme="light">
             <Router />
             <Toaster />
+            {/* Diagnostic tool - available in Vercel deployment */}
+            {typeof window !== "undefined" &&
+              window.location.hostname.includes("vercel.app") && (
+                <div className="fixed bottom-4 right-4 z-50">
+                  <button
+                    onClick={async () => {
+                      try {
+                        console.log("Testing database connection...");
+                        const res = await fetch("/api/test-db");
+                        const data = await res.json();
+                        console.log("Database test result:", data);
+                        alert(
+                          data.success
+                            ? `✅ Database connection successful! (${data.duration})`
+                            : `❌ Database connection failed: ${data.error}`
+                        );
+                      } catch (err) {
+                        console.error("Error running database test:", err);
+                        alert(
+                          `❌ Error testing database: ${
+                            err instanceof Error ? err.message : String(err)
+                          }`
+                        );
+                      }
+                    }}
+                    className="bg-black text-white px-3 py-1 rounded-md text-sm shadow-lg"
+                  >
+                    Test DB Connection
+                  </button>
+                </div>
+              )}
           </ThemeProvider>
         </SelectedChannelProvider>
       </AuthProvider>

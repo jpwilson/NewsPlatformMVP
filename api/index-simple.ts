@@ -4,14 +4,26 @@ import { createClient } from '@supabase/supabase-js';
 // Create Supabase client directly in the handler
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
+
+console.log('Supabase URL exists:', !!supabaseUrl);
+console.log('Supabase Key exists:', !!supabaseKey);
+
 let supabase: ReturnType<typeof createClient> | null = null;
 
 try {
   if (supabaseUrl && supabaseKey) {
-    supabase = createClient(supabaseUrl, supabaseKey);
+    console.log('Attempting to initialize Supabase client with URL:', supabaseUrl.substring(0, 15) + '...');
+    supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        persistSession: false, // Don't persist session in serverless environment
+        autoRefreshToken: false,
+      },
+    });
     console.log('Supabase client initialized successfully');
   } else {
-    console.log('Supabase URL or key missing, using mock data');
+    console.error('Supabase URL or key missing - check Vercel environment variables');
+    if (!supabaseUrl) console.error('SUPABASE_URL is missing');
+    if (!supabaseKey) console.error('SUPABASE_SERVICE_KEY is missing');
   }
 } catch (error) {
   console.error('Error creating Supabase client:', error);
@@ -81,6 +93,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const url = req.url || '';
   console.log(`[Vercel API] ${req.method} ${url}`);
 
+  // Check if Supabase is initialized at request time
+  if (!supabase) {
+    return res.status(500).json({ 
+      error: 'Supabase client not initialized',
+      supabaseUrl: !!supabaseUrl,
+      supabaseKey: !!supabaseKey,
+      help: 'Please check environment variables in Vercel dashboard'
+    });
+  }
+
   // Basic routing based on the path
   const path = url.split('?')[0] || '';
   
@@ -118,55 +140,85 @@ async function handleUser(req: VercelRequest, res: VercelResponse) {
 // Handler for /api/channels
 async function handleChannels(req: VercelRequest, res: VercelResponse) {
   try {
-    // If we have a working Supabase client, try to use it
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('channels').select('*').order('name');
-        
-        if (!error && data && data.length > 0) {
-          return res.status(200).json(data);
-        }
-        // If error or no data, fall through to mock data
-      } catch (error) {
-        console.log('Error fetching from Supabase, using mock data:', error);
-      }
+    // Make a test query first to verify the connection
+    console.log('Testing Supabase connection in /api/channels...');
+    
+    const { data, error } = await supabase!.from('channels').select('count').limit(1);
+    
+    if (error) {
+      console.error('Supabase connection test failed:', error);
+      return res.status(500).json({ 
+        error: 'Supabase connection failed',
+        details: error.message,
+        code: error.code 
+      });
     }
     
-    // Return mock data if Supabase failed or isn't initialized
-    console.log('Returning mock channels data');
-    return res.status(200).json(MOCK_CHANNELS);
+    console.log('Supabase connection test successful, fetching channels');
+    
+    // If test passed, make the real query
+    const { data: channels, error: channelsError } = await supabase!.from('channels').select('*').order('name');
+    
+    if (channelsError) {
+      console.error('Error fetching channels:', channelsError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch channels',
+        details: channelsError.message,
+        code: channelsError.code 
+      });
+    }
+    
+    return res.status(200).json(channels || []);
   } catch (error) {
-    console.error('Error in handleChannels:', error);
-    return res.status(200).json(MOCK_CHANNELS); // Always return something usable
+    console.error('Unexpected error in handleChannels:', error);
+    return res.status(500).json({ 
+      error: 'Unexpected error in handleChannels',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 }
 
 // Handler for /api/articles
 async function handleArticles(req: VercelRequest, res: VercelResponse) {
   try {
-    // If we have a working Supabase client, try to use it
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('articles')
-          .select('*')
-          .eq('published', true)
-          .order('created_at', { ascending: false });
-        
-        if (!error && data && data.length > 0) {
-          return res.status(200).json(data);
-        }
-        // If error or no data, fall through to mock data
-      } catch (error) {
-        console.log('Error fetching from Supabase, using mock data:', error);
-      }
+    console.log('Testing Supabase connection in /api/articles...');
+    
+    // Test connection first
+    const { data: testData, error: testError } = await supabase!.from('articles').select('count').limit(1);
+    
+    if (testError) {
+      console.error('Supabase connection test failed:', testError);
+      return res.status(500).json({ 
+        error: 'Supabase connection failed',
+        details: testError.message,
+        code: testError.code 
+      });
     }
     
-    // Return mock data if Supabase failed or isn't initialized
-    console.log('Returning mock articles data');
-    return res.status(200).json(MOCK_ARTICLES);
+    console.log('Supabase connection test successful, fetching articles');
+    
+    // Make the real query
+    const { data: articles, error: articlesError } = await supabase!
+      .from('articles')
+      .select('*')
+      .eq('published', true)
+      .order('created_at', { ascending: false });
+    
+    if (articlesError) {
+      console.error('Error fetching articles:', articlesError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch articles',
+        details: articlesError.message,
+        code: articlesError.code 
+      });
+    }
+    
+    return res.status(200).json(articles || []);
   } catch (error) {
-    console.error('Error in handleArticles:', error);
-    return res.status(200).json(MOCK_ARTICLES); // Always return something usable
+    console.error('Unexpected error in handleArticles:', error);
+    return res.status(500).json({ 
+      error: 'Unexpected error in handleArticles',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 } 

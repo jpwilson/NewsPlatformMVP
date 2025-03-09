@@ -10,6 +10,10 @@
             "use": "@vercel/node"
         },
         {
+            "src": "api/test-db.ts",
+            "use": "@vercel/node"
+        },
+        {
             "src": "package.json",
             "use": "@vercel/static-build",
             "config": {
@@ -21,6 +25,10 @@
         {
             "src": "/api/debug",
             "dest": "/api/debug.ts"
+        },
+        {
+            "src": "/api/test-db",
+            "dest": "/api/test-db.ts"
         },
         {
             "src": "/api/(.*)",
