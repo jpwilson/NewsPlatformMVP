@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import "../lib/oauth-debug"; // Add debug utilities
 
 // Schema for login
 const loginSchema = z.object({
@@ -98,10 +99,19 @@ export default function AuthPage() {
   // Update the handleGoogleSignIn function
   const handleGoogleSignIn = async () => {
     try {
+      // Add debug logs to see what's happening
+      console.log("Initiating Google sign-in from:", window.location.origin);
+      console.log("Full URL:", window.location.href);
+
+      // Create the redirect URL, ensuring it uses the current domain
+      const redirectTo = `${window.location.origin}/auth-callback`;
+      console.log("Setting redirect URL to:", redirectTo);
+
+      // Proceed with OAuth sign-in
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth-callback`,
+          redirectTo, // Use our explicitly constructed URL
           scopes: "email profile",
           queryParams: {
             prompt: "select_account",
@@ -113,6 +123,8 @@ export default function AuthPage() {
       if (error) {
         console.error("Error signing in with Google:", error);
         setError(error.message);
+      } else {
+        console.log("OAuth initiated successfully:", data);
       }
     } catch (err) {
       console.error("Unexpected error during Google sign-in:", err);

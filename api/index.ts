@@ -84,6 +84,83 @@ app.get("/api/user", (req, res) => {
   return res.sendStatus(401);
 });
 
+// Add Supabase callback endpoint for Google OAuth
+app.post('/api/auth/supabase-callback', async (req, res) => {
+  try {
+    const { supabase_uid, email, name } = req.body;
+    
+    console.log('Supabase OAuth callback received:', { 
+      supabase_uid: supabase_uid ? "✓" : "✗", 
+      email: email ? "✓" : "✗",
+      name: name ? "✓" : "✗"
+    });
+    
+    if (!supabase_uid) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing Supabase user ID' 
+      });
+    }
+    
+    // Try to find existing user with this Supabase ID
+    const { data: existingUser, error: findError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('supabase_uid', supabase_uid)
+      .single();
+    
+    if (findError && findError.code !== 'PGRST116') {
+      console.error('Error finding user:', findError);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Database error when finding user' 
+      });
+    }
+    
+    if (existingUser) {
+      console.log('Found existing user:', existingUser.username);
+      return res.json({ 
+        success: true, 
+        user: existingUser 
+      });
+    }
+    
+    // Create a new user
+    const username = email ? email.split('@')[0] : `user_${Date.now()}`;
+    console.log('Creating new user with username:', username);
+    
+    const { data: newUser, error: createError } = await supabase
+      .from('users')
+      .insert([{ 
+        username, 
+        password: '', // No password needed
+        supabase_uid 
+      }])
+      .select()
+      .single();
+    
+    if (createError) {
+      console.error('Error creating user:', createError);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to create user' 
+      });
+    }
+    
+    return res.json({ 
+      success: true, 
+      user: newUser 
+    });
+  } catch (error) {
+    console.error('Error in Supabase callback:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error',
+      details: String(error)
+    });
+  }
+});
+
 // Channels route
 app.get("/api/channels", async (req, res) => {
   try {
