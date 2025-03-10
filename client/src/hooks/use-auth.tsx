@@ -25,49 +25,16 @@ type AuthContextType = {
   loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
   registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
-  isGuestMode: boolean;
 };
 
 type LoginData = Pick<InsertUser, "username" | "password">;
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
-// Detect if we're on Vercel deployment
-const isVercelDeployment =
-  typeof window !== "undefined" &&
-  window.location.hostname.includes("vercel.app");
-
-// Create a guest user for Vercel deployment only
-const GUEST_USER: SelectUser = {
-  id: 999,
-  username: "demo_user",
-  password: "",
-  description: "Demo User Account",
-  supabase_uid: null,
-  created_at: new Date(),
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const [isGuestMode, setIsGuestMode] = useState<boolean>(false);
 
-  // Check if we're on Vercel and switch to guest mode if needed
-  useEffect(() => {
-    if (isVercelDeployment) {
-      console.info("Running on Vercel deployment - enabling guest mode");
-      setIsGuestMode(true);
-
-      // Show toast notification to inform users
-      toast({
-        title: "Demo Mode Activated",
-        description:
-          "Using guest account for Vercel demo. Some features are limited.",
-        duration: 6000,
-      });
-    }
-  }, []);
-
-  // Normal authentication for local development
+  // Normal authentication
   const {
     data: user,
     error,
@@ -75,19 +42,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   } = useQuery<SelectUser | undefined, Error>({
     queryKey: ["/api/user"],
     queryFn: getQueryFn({ on401: "returnNull" }),
-    enabled: !isGuestMode, // Don't run this query in guest mode
   });
 
-  // Use the guest user or normal user data
-  const currentUser = isGuestMode ? GUEST_USER : user ?? null;
+  const currentUser = user ?? null;
 
-  // Original mutation implementations
+  // Mutation implementations
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
-      if (isGuestMode) {
-        // Simulate login in guest mode
-        return GUEST_USER;
-      }
       const res = await apiRequest("POST", "/api/login", credentials);
       return await res.json();
     },
@@ -95,12 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       queryClient.setQueryData(["/api/user"], user);
     },
     onError: (error: Error) => {
-      if (isVercelDeployment && !isGuestMode) {
-        console.warn("Login failed, switching to guest mode");
-        setIsGuestMode(true);
-        return;
-      }
-
       toast({
         title: "Login failed",
         description:
@@ -112,10 +67,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (credentials: InsertUser) => {
-      if (isGuestMode) {
-        // Simulate registration in guest mode
-        return GUEST_USER;
-      }
       const res = await apiRequest("POST", "/api/register", credentials);
       return await res.json();
     },
@@ -133,10 +84,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      if (isGuestMode) {
-        // Nothing to do in guest mode
-        return;
-      }
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
@@ -155,12 +102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user: currentUser,
-        isLoading: isLoading && !isGuestMode,
+        isLoading,
         error,
         loginMutation,
         logoutMutation,
         registerMutation,
-        isGuestMode,
       }}
     >
       {children}

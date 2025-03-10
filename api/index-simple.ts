@@ -138,12 +138,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 // Handler for /api/user
 async function handleUser(req: VercelRequest, res: VercelResponse) {
-  // Since we can't use sessions easily in serverless, return a guest user for now
-  return res.status(200).json({
-    id: 999,
-    username: 'demo_user',
-    isGuest: true
-  });
+  try {
+    // Check if we have an authorization header with a token
+    const authHeader = req.headers.authorization;
+    
+    if (!supabase) {
+      return res.status(500).json({ 
+        error: 'Supabase client not initialized',
+        supabaseUrl: !!supabaseUrl,
+        supabaseKey: !!supabaseKey
+      });
+    }
+    
+    // If there's no auth header, return null user (not logged in)
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(200).json(null);
+    }
+    
+    // Extract the token
+    const token = authHeader.split(' ')[1];
+    
+    // Verify the token with Supabase
+    const { data, error } = await supabase.auth.getUser(token);
+    
+    if (error || !data.user) {
+      console.error('Auth error:', error);
+      return res.status(200).json(null);
+    }
+    
+    // Return the authenticated user
+    return res.status(200).json({
+      id: data.user.id,
+      email: data.user.email,
+      username: data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'User',
+      isGuest: false
+    });
+  } catch (error) {
+    console.error('Unexpected error in handleUser:', error);
+    // On error, return null user rather than an error to avoid breaking the frontend
+    return res.status(200).json(null);
+  }
 }
 
 // Handler for /api/channels
