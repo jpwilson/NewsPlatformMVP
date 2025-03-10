@@ -23,19 +23,15 @@
             "destination": "/api/debug.ts"
         },
         {
-            "source": "/api/(.*)",
+            "source": "/api/:path*",
             "destination": "/api/index-simple.ts"
         },
         {
-            "source": "/assets/(.*)",
-            "destination": "/assets/$1"
+            "source": "/assets/:path*",
+            "destination": "/assets/:path*"
         },
         {
-            "source": "/(.*\\.(js|css|ico|png|jpg|svg|json))",
-            "destination": "/$1"
-        },
-        {
-            "source": "/(.*)",
+            "source": "/:path*",
             "destination": "/index.html"
         }
     ],
