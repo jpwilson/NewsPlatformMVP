@@ -1,30 +1,29 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
-  // Set CORS headers for all responses
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+export default async function debug(req: VercelRequest, res: VercelResponse) {
+  // Only show this in development or with a special header
+  const isAllowed = process.env.NODE_ENV === 'development' || 
+                   req.headers['x-debug-token'] === 'super-secret-token';
   
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  if (!isAllowed) {
+    return res.status(403).json({ error: 'Not authorized' });
   }
-
-  // Return environment information for debugging
+  
+  // Safe display of environment variables (hide secrets)
+  const envInfo = {
+    NODE_ENV: process.env.NODE_ENV,
+    SUPABASE_URL: process.env.SUPABASE_URL ? 'Set (value hidden)' : 'Not set',
+    SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY ? 'Set (value hidden)' : 'Not set',
+    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ? 'Set (value hidden)' : 'Not set',
+    VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ? 'Set (value hidden)' : 'Not set',
+    // Include other relevant variables
+    VERCEL_URL: process.env.VERCEL_URL || 'Not set',
+    VERCEL_ENV: process.env.VERCEL_ENV || 'Not set',
+  };
+  
   return res.status(200).json({
-    success: true,
-    message: 'Debug endpoint working',
-    env: {
-      nodeEnv: process.env.NODE_ENV,
-      hasSupabaseUrl: !!process.env.SUPABASE_URL,
-      hasSupabaseKey: !!process.env.SUPABASE_SERVICE_KEY,
-      hasSupabaseDatabaseUrl: !!process.env.SUPABASE_DATABASE_URL,
-      hasSessionSecret: !!process.env.SESSION_SECRET,
-      // Don't expose actual values, just whether they exist
-    },
+    envInfo,
     headers: req.headers,
-    url: req.url,
-    method: req.method,
+    timestamp: new Date().toISOString()
   });
 } 

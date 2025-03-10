@@ -39,6 +39,17 @@
             "dest": "/index.html"
         }
     ],
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "x-vercel-skip-toolbar",
+                    "value": "1"
+                }
+            ]
+        }
+    ],
     "env": {
         "VITE_SUPABASE_URL": "${VITE_SUPABASE_URL}",
         "VITE_SUPABASE_ANON_KEY": "${VITE_SUPABASE_ANON_KEY}",
