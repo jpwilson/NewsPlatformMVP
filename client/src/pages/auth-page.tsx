@@ -98,10 +98,18 @@ export default function AuthPage() {
   // Update the handleGoogleSignIn function
   const handleGoogleSignIn = async () => {
     try {
+      // Determine redirect URL
+      // Ensure we're using the full URL from the current location
+      const currentURL = window.location.href;
+      const baseURL = currentURL.split("/auth")[0];
+      const redirectURL = `${baseURL}/auth-callback`;
+
+      console.log("OAuth redirect will be to:", redirectURL);
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth-callback`,
+          redirectTo: redirectURL,
           scopes: "email profile",
           queryParams: {
             prompt: "select_account",
@@ -111,12 +119,14 @@ export default function AuthPage() {
       });
 
       if (error) {
-        console.error("Error signing in with Google:", error);
-        setError(error.message);
+        console.error("OAuth sign-in error:", error);
+        throw error;
       }
-    } catch (err) {
-      console.error("Unexpected error during Google sign-in:", err);
-      setError("An unexpected error occurred");
+
+      console.log("OAuth session:", data);
+    } catch (error) {
+      setError("Failed to sign in with Google");
+      console.error(error);
     }
   };
 

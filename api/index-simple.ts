@@ -1,30 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Get Supabase credentials - use fallbacks for development and deployment
-const FALLBACK_SUPABASE_URL = 'https://mwrhaqghxatfwzsjjfrv.supabase.co';
-const FALLBACK_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13cmhhcWdoeGF0Znd6c2pqZnJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA1MTA3ODYsImV4cCI6MjA1NjA4Njc4Nn0.lFttNvmLpKXFRCq58bmn8OiVxnastEF7jWopx3CKa3M';
+// HARDCODED CREDENTIALS - use these directly without any environment variable references
+const HARDCODED_SUPABASE_URL = 'https://mwrhaqghxatfwzsjjfrv.supabase.co';
+const HARDCODED_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13cmhhcWdoeGF0Znd6c2pqZnJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA1MTA3ODYsImV4cCI6MjA1NjA4Njc4Nn0.lFttNvmLpKXFRCq58bmn8OiVxnastEF7jWopx3CKa3M';
 
-// Check environment variables and use fallbacks if needed
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || FALLBACK_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.VITE_SUPABASE_ANON_KEY || FALLBACK_SUPABASE_KEY;
+console.log('Creating Supabase client with hardcoded credentials');
 
-console.log('Supabase initialization:', { 
-  urlProvided: !!supabaseUrl, 
-  keyProvided: !!supabaseKey,
-  usingFallbackUrl: supabaseUrl === FALLBACK_SUPABASE_URL,
-  usingFallbackKey: supabaseKey === FALLBACK_SUPABASE_KEY
-});
-
-let supabase: ReturnType<typeof createClient> | null = null;
-
+// NEVER look at environment variables - use hardcoded values directly
+let supabase: SupabaseClient | null = null;
 try {
-  if (supabaseUrl && supabaseKey) {
-    supabase = createClient(supabaseUrl, supabaseKey);
-    console.log('Supabase client created successfully');
-  } else {
-    console.error('Missing Supabase credentials');
-  }
+  supabase = createClient(HARDCODED_SUPABASE_URL, HARDCODED_SUPABASE_KEY);
+  console.log('Supabase client created successfully with hardcoded values');
 } catch (error) {
   console.error('Error creating Supabase client:', error);
 }
@@ -76,39 +63,66 @@ async function handleUser(req: VercelRequest, res: VercelResponse) {
 // Handler for /api/channels
 async function handleChannels(req: VercelRequest, res: VercelResponse) {
   if (!supabase) {
-    return res.status(500).json({ error: 'Supabase client not initialized' });
+    console.error('Supabase client not initialized in channels handler');
+    return res.status(500).json({ 
+      error: 'Supabase client not initialized',
+      supabaseStatus: 'not initialized',
+      url: req.url
+    });
   }
   
   try {
+    console.log('Fetching channels from Supabase...');
     const { data, error } = await supabase.from('channels').select('*').order('name');
     
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching channels:', error);
+      throw error;
+    }
     
+    console.log(`Successfully fetched ${data?.length || 0} channels`);
     return res.status(200).json(data || []);
   } catch (error) {
-    console.error('Error fetching channels:', error);
-    return res.status(500).json({ error: 'Failed to fetch channels' });
+    console.error('Error in handleChannels:', error);
+    return res.status(500).json({
+      error: 'Error fetching channels',
+      message: error instanceof Error ? error.message : String(error),
+      url: req.url
+    });
   }
 }
 
 // Handler for /api/articles
 async function handleArticles(req: VercelRequest, res: VercelResponse) {
   if (!supabase) {
-    return res.status(500).json({ error: 'Supabase client not initialized' });
+    console.error('Supabase client not initialized in articles handler');
+    return res.status(500).json({ 
+      error: 'Supabase client not initialized',
+      supabaseStatus: 'not initialized',
+      url: req.url
+    });
   }
   
   try {
-    const { data, error } = await supabase
-      .from('articles')
-      .select('*')
-      .eq('published', true)
-      .order('created_at', { ascending: false });
+    console.log('Fetching articles from Supabase...');
+    const { data, error } = await supabase.from('articles').select(`
+      *,
+      channel:channels(id, name)
+    `).order('created_at', { ascending: false });
     
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching articles:', error);
+      throw error;
+    }
     
+    console.log(`Successfully fetched ${data?.length || 0} articles`);
     return res.status(200).json(data || []);
   } catch (error) {
-    console.error('Error fetching articles:', error);
-    return res.status(500).json({ error: 'Failed to fetch articles' });
+    console.error('Error in handleArticles:', error);
+    return res.status(500).json({
+      error: 'Error fetching articles',
+      message: error instanceof Error ? error.message : String(error),
+      url: req.url
+    });
   }
 } 
