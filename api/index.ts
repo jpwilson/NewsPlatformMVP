@@ -1,53 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import express from 'express';
 import "dotenv/config";
-import * as fs from 'fs';
-import * as path from 'path';
-
-// Debug logs for deployment
-console.log("API Handler initializing");
-console.log("Current directory:", process.cwd());
-console.log("Files in current directory:", fs.existsSync(process.cwd()) ? fs.readdirSync(process.cwd()) : "Cannot read directory");
-console.log("Server directory exists:", fs.existsSync(path.join(process.cwd(), 'server')));
-
-// List files in server directory
-const serverDir = path.join(process.cwd(), 'server');
-if (fs.existsSync(serverDir)) {
-  console.log("Files in server directory:", fs.readdirSync(serverDir));
-}
-
-// First try importing local routes (safer approach)
-let registerRoutes;
-try {
-  console.log("Attempting to import local routes");
-  const { registerRoutes: localRoutes } = await import('./routes');
-  registerRoutes = localRoutes;
-  console.log("Successfully imported local routes function");
-} catch (error) {
-  console.error("Failed to import local routes:", error);
-
-  // Fallback to server/routes with explicit extensions
-  try {
-    console.log("Attempting to import server/routes.js");
-    const routes = await import('../server/routes.js');
-    registerRoutes = routes.registerRoutes;
-    console.log("Successfully imported registerRoutes function");
-  } catch (error) {
-    console.error("Failed to import server/routes.js:", error);
-
-    try {
-      console.log("Attempting to import server/routes.ts");
-      const routes = await import('../server/routes.ts');
-      registerRoutes = routes.registerRoutes;
-      console.log("Successfully imported registerRoutes function with .ts extension");
-    } catch (fallbackError) {
-      console.error("Failed to import server/routes.ts:", fallbackError);
-    }
-  }
-}
 
 // Create Express app
 const app = express();
+
+// Debug logs for deployment
+console.log("API Handler initializing");
+console.log("Environment:", process.env.NODE_ENV);
+console.log("Has SUPABASE_URL:", !!process.env.SUPABASE_URL);
+console.log("Has SUPABASE_SERVICE_KEY:", !!process.env.SUPABASE_SERVICE_KEY);
 
 // Setup Express middleware
 app.use(express.json());
@@ -98,32 +60,80 @@ app.use((req, res, next) => {
   next();
 });
 
-// Register API routes if available
+// Import and register routes
+let registerRoutes;
+try {
+  const { registerRoutes: localRoutes } = require('./routes');
+  registerRoutes = localRoutes;
+  console.log("Successfully imported routes with require");
+} catch (error) {
+  console.error("Failed to import routes with require:", error);
+  
+  // Fallback to dynamic import
+  import('./routes').then(module => {
+    console.log("Successfully imported routes with dynamic import");
+    registerRoutes = module.registerRoutes;
+    if (registerRoutes) {
+      try {
+        registerRoutes(app);
+        console.log("Routes registered successfully with dynamic import");
+      } catch (error) {
+        console.error("Error registering routes with dynamic import:", error);
+      }
+    }
+  }).catch(error => {
+    console.error("Failed to import routes with dynamic import:", error);
+  });
+}
+
+// Register routes if available from require
 if (registerRoutes) {
-  console.log("Registering routes");
   try {
     registerRoutes(app);
     console.log("Routes registered successfully");
   } catch (error) {
     console.error("Error registering routes:", error);
-    
-    // Add direct fallback for essential routes if routes registration fails
-    app.get('/api/health', (req, res) => {
-      res.json({ status: "ok", timestamp: new Date().toISOString() });
-    });
   }
-} else {
-  // Add a fallback route to show debugging info
-  app.get('/api/*', (req, res) => {
-    res.status(500).json({
-      error: "API routes not registered due to module loading issues",
-      path: req.path,
-      cwd: process.cwd(),
-      env: process.env.NODE_ENV,
-      serverExists: fs.existsSync(path.join(process.cwd(), 'server')),
-    });
-  });
 }
+
+// Fallback routes for essential endpoints
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: "ok", 
+    timestamp: new Date().toISOString(),
+    fallback: true 
+  });
+});
+
+app.get('/api/channels', async (req, res) => {
+  // If this route is hit, the regular routes weren't registered
+  try {
+    const { supabase } = await import('./supabase');
+    const { data, error } = await supabase.from('channels').select('*');
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error("Fallback channels error:", error);
+    res.status(500).json({ error: "Failed to fetch channels in fallback route" });
+  }
+});
+
+app.get('/api/articles', async (req, res) => {
+  // If this route is hit, the regular routes weren't registered
+  try {
+    const { supabase } = await import('./supabase');
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('published', true)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error) {
+    console.error("Fallback articles error:", error);
+    res.status(500).json({ error: "Failed to fetch articles in fallback route" });
+  }
+});
 
 // Error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

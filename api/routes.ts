@@ -1,20 +1,22 @@
-// This file exists to work around ESM import issues in Vercel
-// It directly exports the routes functionality without requiring a cross-directory import
-
+// This file contains a simplified version of the API routes for Vercel deployment
 import type { Express } from "express";
 import { supabase } from "./supabase";
 import { z } from "zod";
 
-// Duplicating the registerRoutes function to avoid import issues
+// Simplified registerRoutes function that doesn't depend on any server-side code
 export async function registerRoutes(app: Express): Promise<void> {
   // Log environment variables (don't log sensitive values)
-  console.log("API Routes with Supabase initializing");
-  console.log("Has SUPABASE_URL:", !!process.env.SUPABASE_URL);
-  console.log("Has SUPABASE_SERVICE_KEY:", !!process.env.SUPABASE_SERVICE_KEY);
+  console.log("API Routes initializing");
+  console.log("Environment:", process.env.NODE_ENV);
 
   // Basic health check route
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+    res.json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      env: process.env.NODE_ENV,
+      deployment: "vercel"
+    });
   });
 
   // User routes - simplified for deployment
@@ -60,7 +62,7 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.json(enrichedChannels || []);
     } catch (error) {
       console.error("Error fetching channels:", error);
-      res.status(500).json({ error: "Failed to fetch channels", details: error });
+      res.status(500).json({ error: "Failed to fetch channels", details: String(error) });
     }
   });
 
@@ -83,7 +85,7 @@ export async function registerRoutes(app: Express): Promise<void> {
       res.json(articles || []);
     } catch (error) {
       console.error("Error fetching articles:", error);
-      res.status(500).json({ error: "Failed to fetch articles", details: error });
+      res.status(500).json({ error: "Failed to fetch articles", details: String(error) });
     }
   });
 } 
