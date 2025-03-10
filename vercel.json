@@ -17,26 +17,26 @@
             }
         }
     ],
-    "routes": [
+    "rewrites": [
         {
-            "src": "/api/debug",
-            "dest": "/api/debug.ts"
+            "source": "/api/debug",
+            "destination": "/api/debug.ts"
         },
         {
-            "src": "/api/(.*)",
-            "dest": "/api/index-simple.ts"
+            "source": "/api/(.*)",
+            "destination": "/api/index-simple.ts"
         },
         {
-            "src": "/assets/(.*)",
-            "dest": "/assets/$1"
+            "source": "/assets/(.*)",
+            "destination": "/assets/$1"
         },
         {
-            "src": "/(.*\\.(js|css|ico|png|jpg|svg|json))",
-            "dest": "/$1"
+            "source": "/(.*\\.(js|css|ico|png|jpg|svg|json))",
+            "destination": "/$1"
         },
         {
-            "src": "/(.*)",
-            "dest": "/index.html"
+            "source": "/(.*)",
+            "destination": "/index.html"
         }
     ],
     "headers": [
