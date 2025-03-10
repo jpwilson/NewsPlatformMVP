@@ -3,6 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Disable Vercel toolbar -->
+    <script>
+      // Disable Vercel Toolbar
+      window.addEventListener('load', function() {
+        // Remove Vercel toolbar if it exists
+        const toolbar = document.querySelector('[id*="vercel-toolbar"]');
+        if (toolbar) {
+          toolbar.remove();
+        }
+        
+        // Disable the Vercel Live Feedback widget
+        const feedbackElements = document.querySelectorAll('vercel-live-feedback');
+        if (feedbackElements.length > 0) {
+          feedbackElements.forEach(el => el.remove());
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

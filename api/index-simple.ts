@@ -224,7 +224,11 @@ async function handleChannels(req: VercelRequest, res: VercelResponse) {
 // Handler for /api/articles
 async function handleArticles(req: VercelRequest, res: VercelResponse) {
   try {
-    console.log('Testing Supabase connection in /api/articles...');
+    console.log('Handling article request:', req.url);
+    
+    // Extract article ID if present in the URL (e.g., /api/articles/123)
+    const urlParts = req.url?.split('/') || [];
+    const articleId = urlParts.length > 3 ? urlParts[3].split('?')[0] : null;
     
     // Test connection first
     const { data: testData, error: testError } = await supabase!.from('articles').select('count').limit(1);
@@ -238,9 +242,37 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
       });
     }
     
-    console.log('Supabase connection test successful, fetching articles');
+    console.log('Supabase connection successful, proceeding with article query');
     
-    // Make the real query
+    // If we have an article ID, fetch that specific article
+    if (articleId) {
+      console.log(`Fetching specific article with ID: ${articleId}`);
+      
+      const { data: article, error: articleError } = await supabase!
+        .from('articles')
+        .select('*, channels(name, description), users(username)')
+        .eq('id', articleId)
+        .single();
+      
+      if (articleError) {
+        console.error(`Error fetching article ${articleId}:`, articleError);
+        return res.status(articleError.code === '404' ? 404 : 500).json({ 
+          error: 'Failed to fetch article',
+          details: articleError.message,
+          code: articleError.code 
+        });
+      }
+      
+      if (!article) {
+        return res.status(404).json({ error: 'Article not found' });
+      }
+      
+      return res.status(200).json(article);
+    }
+    
+    // Otherwise, fetch all articles (listing)
+    console.log('Fetching all articles');
+    
     const { data: articles, error: articlesError } = await supabase!
       .from('articles')
       .select('*')

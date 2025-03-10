@@ -98,10 +98,13 @@ export default function AuthPage() {
   // Update the handleGoogleSignIn function
   const handleGoogleSignIn = async () => {
     try {
+      // Get the current hostname to handle both local and deployed environments
+      const currentOrigin = window.location.origin;
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth-callback`,
+          redirectTo: `${currentOrigin}/auth-callback`,
           scopes: "email profile",
           queryParams: {
             prompt: "select_account",
