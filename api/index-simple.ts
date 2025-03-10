@@ -237,53 +237,51 @@ async function handleChannels(req: VercelRequest, res: VercelResponse) {
 // Handler for /api/articles
 async function handleArticles(req: VercelRequest, res: VercelResponse) {
   try {
-    console.log('Handling article request:', req.url);
+    // Get the full URL and query params for logging
+    console.log('Article API: Request URL:', req.url);
+    console.log('Article API: Query params:', req.query);
     
-    // Extract article ID if present in the URL
-    // This needs to be more flexible to work with various URL formats
-    const url = req.url || '';
     let articleId: string | null = null;
     
-    // Parse the ID from various possible URL formats
-    const articleIdMatch = url.match(/\/api\/articles\/([^\/\?]+)/);
-    if (articleIdMatch && articleIdMatch[1]) {
-      articleId = articleIdMatch[1];
+    // APPROACH 1: Check for articleId in query parameters (from Vercel routing)
+    if (req.query.articleId) {
+      articleId = req.query.articleId as string;
+      console.log('Article API: Found article ID in query params:', articleId);
+    } 
+    // APPROACH 2: Extract from URL path pattern (for local development)
+    else {
+      const url = req.url || '';
+      const articleIdMatch = url.match(/\/api\/articles\/([^\/\?]+)/);
+      if (articleIdMatch && articleIdMatch[1]) {
+        articleId = articleIdMatch[1];
+        console.log('Article API: Extracted article ID from URL path:', articleId);
+      }
     }
     
-    console.log('Extracted article ID:', articleId);
-    
-    // Test connection first
-    const { data: testData, error: testError } = await supabase!.from('articles').select('count').limit(1);
-    
-    if (testError) {
-      console.error('Supabase connection test failed:', testError);
+    // Check Supabase connection
+    if (!supabase) {
+      console.error('Article API: Supabase client not initialized');
       return res.status(500).json({ 
-        error: 'Supabase connection failed',
-        details: testError.message,
-        code: testError.code 
+        error: 'Supabase client not initialized',
+        supabaseUrl: !!supabaseUrl,
+        supabaseKey: !!supabaseKey
       });
     }
     
-    console.log('Supabase connection successful, proceeding with article query');
-    
     // If we have an article ID, fetch that specific article
     if (articleId) {
-      console.log(`Fetching specific article with ID: ${articleId}`);
+      console.log(`Article API: Fetching article with ID: ${articleId}`);
       
-      // For debugging, log all articles first to see if the ID exists
-      const { data: allArticles } = await supabase!.from('articles').select('id');
-      console.log('Available article IDs:', allArticles?.map(a => a.id));
-      
-      // Now fetch the specific article
-      const { data: article, error: articleError } = await supabase!
+      // Get the article
+      const { data: article, error: articleError } = await supabase
         .from('articles')
         .select('*, channels(name, description), users(username)')
         .eq('id', articleId)
         .single();
       
       if (articleError) {
-        console.error(`Error fetching article ${articleId}:`, articleError);
-        return res.status(articleError.code === '404' ? 404 : 500).json({ 
+        console.error(`Article API: Error fetching article ${articleId}:`, articleError);
+        return res.status(500).json({ 
           error: 'Failed to fetch article',
           details: articleError.message,
           code: articleError.code 
@@ -291,25 +289,25 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
       }
       
       if (!article) {
-        console.log(`Article with ID ${articleId} not found`);
+        console.log(`Article API: Article with ID ${articleId} not found`);
         return res.status(404).json({ error: 'Article not found' });
       }
       
-      console.log(`Successfully found article: ${article.id} - ${article.title}`);
+      console.log(`Article API: Successfully found article: ${article.id} - ${article.title}`);
       return res.status(200).json(article);
     }
     
     // Otherwise, fetch all articles (listing)
-    console.log('Fetching all articles');
+    console.log('Article API: Fetching all articles');
     
-    const { data: articles, error: articlesError } = await supabase!
+    const { data: articles, error: articlesError } = await supabase
       .from('articles')
       .select('*')
       .eq('published', true)
       .order('created_at', { ascending: false });
     
     if (articlesError) {
-      console.error('Error fetching articles:', articlesError);
+      console.error('Article API: Error fetching articles:', articlesError);
       return res.status(500).json({ 
         error: 'Failed to fetch articles',
         details: articlesError.message,
@@ -317,10 +315,10 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
       });
     }
     
-    console.log(`Retrieved ${articles?.length || 0} articles`);
+    console.log(`Article API: Retrieved ${articles?.length || 0} articles`);
     return res.status(200).json(articles || []);
   } catch (error) {
-    console.error('Unexpected error in handleArticles:', error);
+    console.error('Article API: Unexpected error:', error);
     return res.status(500).json({ 
       error: 'Unexpected error in handleArticles',
       message: error instanceof Error ? error.message : 'Unknown error'

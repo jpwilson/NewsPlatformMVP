@@ -9,7 +9,14 @@ export default function AuthCallback() {
     const handleAuthCallback = async () => {
       try {
         setStatus("Processing authentication...");
-        console.log("Auth callback: Starting auth callback processing");
+
+        // Get the origin that initiated the auth flow
+        const authOrigin =
+          localStorage.getItem("auth_origin") || window.location.origin;
+        console.log(`Auth callback: Retrieved origin: ${authOrigin}`);
+
+        // Log the current page URL
+        console.log(`Auth callback: Current URL: ${window.location.href}`);
 
         // Get session from URL
         const {
@@ -33,58 +40,62 @@ export default function AuthCallback() {
 
         // Get user details from session
         const { user } = session;
-        console.log("Auth callback: Supabase user:", user?.id);
-        setStatus("User authenticated, syncing with backend...");
+        console.log("Auth callback: Supabase user ID:", user?.id);
+        setStatus(`User authenticated (${user.email})`);
 
         // Store auth token in localStorage for API requests
         localStorage.setItem("supabase_auth_token", session.access_token);
 
         // Call your backend to create or get user
-        const response = await fetch("/api/auth/supabase-callback", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            supabase_uid: user.id,
-            email: user.email,
-            name: user.user_metadata?.full_name || user.user_metadata?.name,
-          }),
-        });
+        try {
+          const response = await fetch("/api/auth/supabase-callback", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              supabase_uid: user.id,
+              email: user.email,
+              name: user.user_metadata?.full_name || user.user_metadata?.name,
+            }),
+          });
 
-        // Check if we got a response
-        if (!response.ok) {
-          console.error(
-            `Auth callback: Backend error ${response.status}`,
-            await response.text()
-          );
-          setStatus("Backend sync failed");
-          setError(`Server error: ${response.status}`);
-          return;
-        }
+          // Check if we got a response
+          if (!response.ok) {
+            console.error(`Auth callback: Backend error ${response.status}`);
+            setStatus("Backend sync failed");
+            setError(`Server error: ${response.status}`);
+            return;
+          }
 
-        const result = await response.json();
-        console.log("Auth callback: Server response:", result);
+          const result = await response.json();
+          console.log("Auth callback: Backend response:", result);
 
-        if (result.success) {
+          // Set a message before redirecting
           setStatus("Success! Redirecting...");
 
-          // Get the current URL to determine if we're on Vercel or localhost
-          const currentUrl = window.location.origin;
-          console.log(
-            `Auth callback: Redirecting to home page on ${currentUrl}`
-          );
+          // Explicitly redirect to the same domain's homepage
+          const redirectUrl = new URL("/", authOrigin).toString();
+          console.log(`Auth callback: Redirecting to ${redirectUrl}`);
 
-          // Redirect to home page
-          window.location.href = "/";
-        } else {
-          console.error(
-            "Auth callback: Backend reported failure",
-            result.error
-          );
+          // Short delay for user to see success message
+          setTimeout(() => {
+            // Clear any localhost references to avoid confusion
+            if (
+              localStorage.getItem("auth_origin")?.includes("localhost") &&
+              !window.location.origin.includes("localhost")
+            ) {
+              localStorage.removeItem("auth_origin");
+            }
+
+            // Use hard redirect to the root page on the current domain
+            window.location.href = redirectUrl;
+          }, 500);
+        } catch (err) {
+          console.error("Auth callback: Error communicating with backend", err);
           setStatus("Authentication failed");
-          setError(result.error || "Failed to authenticate");
+          setError("Error communicating with backend");
         }
       } catch (err) {
         console.error("Auth callback: Unexpected error", err);
@@ -102,7 +113,9 @@ export default function AuthCallback() {
         <h1 className="text-2xl font-bold mb-4">Authentication Callback</h1>
         <p className="text-xl mb-2">{status}</p>
         {error && <p className="text-red-500 mb-4">{error}</p>}
-        <div className="mt-4 w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin mx-auto"></div>
+        {!error && (
+          <div className="mt-4 w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin mx-auto"></div>
+        )}
       </div>
     </div>
   );

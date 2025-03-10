@@ -4,73 +4,111 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>News Platform</title>
-    <!-- CSS to hide Vercel development toolbar and other utility elements -->
+    <!-- Disable Vercel Development Tools -->
+    <meta name="vercel-deployment-url" content="not-a-real-url" />
+    <meta name="vercel-feedback" content="disabled" />
+    <meta name="vercel-analytics" content="disabled" />
+    <meta name="vercel-toolbar" content="disabled" />
+    
     <style>
-      /* Hide Vercel toolbar and related elements */
-      [id*="vercel-toolbar"],
+      /* Aggressive CSS to hide Vercel-related elements */
+      [id*="vercel"], 
+      [class*="vercel"],
+      [data-vercel],
       vercel-live-feedback,
-      [data-vercel-toolbar],
-      [class*="vercel-toolbar"],
-      /* Hide Test DB Connection button */
-      [id*="test-db-connection"],
-      button:has(span:contains("Test DB Connection")),
-      button:contains("Test DB Connection"),
-      a[href*="test-db"] {
+      div[style*="z-index: 2147483647;"],
+      iframe[style*="z-index: 2147483647;"],
+      button[title*="Test DB Connection"],
+      a[href*="test-db"],
+      [id*="test-db-connection"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
-        pointer-events: none !important;
-        position: absolute !important;
         width: 0 !important;
         height: 0 !important;
-        overflow: hidden !important;
+        position: absolute !important;
+        pointer-events: none !important;
         z-index: -9999 !important;
       }
     </style>
-    <!-- JavaScript to remove Vercel toolbar and test elements -->
+    
     <script>
-      // Remove Vercel toolbar and test elements
-      function removeVercelElements() {
-        // Function to check if an element or its children contain text
-        function containsText(element, text) {
-          if (element.textContent && element.textContent.includes(text)) {
-            return true;
-          }
-          return false;
-        }
-        
-        // Remove elements by various criteria
-        const selectors = [
-          // Vercel toolbar selectors
-          '[id*="vercel-toolbar"]',
-          'vercel-live-feedback',
-          '[data-vercel-toolbar]',
-          '[class*="vercel-toolbar"]',
-          
-          // Test DB Connection button selectors
-          'button'
-        ];
-        
-        selectors.forEach(selector => {
-          document.querySelectorAll(selector).forEach(el => {
-            // For buttons, only remove if they contain "Test DB Connection" text
-            if (selector === 'button') {
-              if (containsText(el, 'Test DB Connection')) {
-                el.remove();
-              }
-            } else {
+      /* Aggressive removal of any Vercel toolbars */
+      (function() {
+        // Immediately run and then set up for later elements
+        function removeElements() {
+          // Find elements with high z-index that might be toolbars
+          document.querySelectorAll('div[style*="z-index: 999"], div[style*="z-index: 9999"], div[style*="z-index: 99999"], div[style*="z-index: 2147483647"], iframe').forEach(el => {
+            // Check if it looks like a toolbar
+            if (el.id && (
+              el.id.includes('vercel') || 
+              el.id.includes('toolbar') || 
+              el.id.includes('test-db')
+            )) {
+              console.log("Removing toolbar element:", el.id);
+              el.remove();
+            }
+            
+            // Check for iframe toolbars
+            if (el.tagName === 'IFRAME' && el.style.zIndex > 1000) {
+              console.log("Removing high z-index iframe");
               el.remove();
             }
           });
+          
+          // Remove any buttons with "Test DB Connection" text
+          document.querySelectorAll('button').forEach(button => {
+            if (button.textContent && button.textContent.includes('Test DB Connection')) {
+              console.log("Removing Test DB Connection button");
+              button.remove();
+            }
+          });
+          
+          // Remove shadow-dom elements that might contain toolbars
+          document.querySelectorAll('*').forEach(el => {
+            if (el.shadowRoot) {
+              console.log("Checking shadow root for toolbar elements");
+              el.remove();
+            }
+          });
+        }
+        
+        // Run immediately
+        removeElements();
+        
+        // Run when DOM is loaded
+        document.addEventListener('DOMContentLoaded', removeElements);
+        
+        // Run on window load
+        window.addEventListener('load', removeElements);
+        
+        // Run periodically to catch any dynamically added elements
+        setInterval(removeElements, 500);
+        
+        // Override any functions Vercel might use to create toolbars
+        window.VercelToolbar = { 
+          initialize: function() { console.log("Blocked Vercel toolbar initialization"); },
+          show: function() { console.log("Blocked Vercel toolbar show request"); }
+        };
+        
+        // Create MutationObserver to catch any new elements
+        const observer = new MutationObserver(mutations => {
+          for (const mutation of mutations) {
+            if (mutation.addedNodes.length) {
+              removeElements();
+            }
+          }
         });
-      }
-      
-      // Run immediately and also when DOM is loaded
-      removeVercelElements();
-      window.addEventListener('DOMContentLoaded', removeVercelElements);
-      
-      // Run periodically to catch dynamically added elements
-      setInterval(removeVercelElements, 1000);
+        
+        // Start observing when body is available
+        if (document.body) {
+          observer.observe(document.body, { childList: true, subtree: true });
+        } else {
+          document.addEventListener('DOMContentLoaded', () => {
+            observer.observe(document.body, { childList: true, subtree: true });
+          });
+        }
+      })();
     </script>
   </head>
   <body>
