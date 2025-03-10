@@ -23,15 +23,11 @@
             "destination": "/api/debug.ts"
         },
         {
-            "source": "/api/:path*",
+            "source": "/api/:match*",
             "destination": "/api/index-simple.ts"
         },
         {
-            "source": "/assets/:path*",
-            "destination": "/assets/:path*"
-        },
-        {
-            "source": "/:path*",
+            "source": "/(.*)",
             "destination": "/index.html"
         }
     ],

@@ -37,6 +37,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleChannels(req, res);
     } else if (path.startsWith('/api/articles')) {
       return await handleArticles(req, res);
+    } else if (path.startsWith('/api/debug-articles')) {
+      return await debugArticles(req, res);
     } else {
       // Default response for unknown routes
       return res.status(404).json({ error: 'Not found' });
@@ -104,15 +106,29 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
   }
   
   try {
-    console.log('Fetching articles from Supabase...');
+    console.log('Fetching articles from Supabase with full relational query...');
+    // Use the original query with full relational data
     const { data, error } = await supabase.from('articles').select(`
       *,
       channel:channels(id, name)
     `).order('created_at', { ascending: false });
     
     if (error) {
-      console.error('Error fetching articles:', error);
-      throw error;
+      // Log the complete error object for better debugging
+      console.error('Error fetching articles:', JSON.stringify(error));
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      
+      return res.status(500).json({
+        error: 'Error fetching articles',
+        details: error,
+        message: error.message,
+        url: req.url
+      });
     }
     
     console.log(`Successfully fetched ${data?.length || 0} articles`);
@@ -124,5 +140,81 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
       message: error instanceof Error ? error.message : String(error),
       url: req.url
     });
+  }
+}
+
+// Special debug handler for articles
+async function debugArticles(req: VercelRequest, res: VercelResponse) {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Supabase client not initialized' });
+  }
+  
+  try {
+    console.log('Running debug articles queries...');
+    
+    // Try different queries to see which ones work
+    const results = {
+      // Test 1: Simple selection
+      simpleSelect: await runSafeQuery(() => 
+        supabase.from('articles').select('*').limit(1)
+      ),
+      
+      // Test 2: Check if the channels relation works
+      channelsTest: await runSafeQuery(() => 
+        supabase.from('channels').select('*').limit(1)
+      ),
+      
+      // Test 3: Try the join but with limited fields
+      simpleJoin: await runSafeQuery(() => 
+        supabase.from('articles').select('id, title, channel:channels(id)').limit(1)
+      ),
+      
+      // Test 4: Full query with proper error capture
+      fullQuery: await runSafeQuery(() => 
+        supabase.from('articles').select(`
+          *,
+          channel:channels(id, name)
+        `).order('created_at', { ascending: false }).limit(1)
+      ),
+      
+      // Include connection info
+      connectionStatus: {
+        supabaseInitialized: !!supabase,
+        url: HARDCODED_SUPABASE_URL
+      }
+    };
+    
+    return res.status(200).json(results);
+  } catch (error) {
+    console.error('Error in debug articles:', error);
+    return res.status(500).json({ 
+      error: 'Debug articles error',
+      message: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+// Helper to safely run queries and capture errors
+async function runSafeQuery(queryFn) {
+  try {
+    const { data, error } = await queryFn();
+    return {
+      success: !error,
+      data: data || null,
+      error: error ? {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      } : null
+    };
+  } catch (e) {
+    return {
+      success: false,
+      data: null,
+      error: {
+        message: e instanceof Error ? e.message : String(e),
+        type: 'exception'
+      }
+    };
   }
 } 

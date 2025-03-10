@@ -12,8 +12,10 @@ export default function AuthCallback() {
         setStatus("Getting session from URL...");
 
         // Log hash for debugging
+        console.log("Full URL:", window.location.href);
         console.log("URL hash:", window.location.hash);
         console.log("URL search:", window.location.search);
+        console.log("URL origin:", window.location.origin);
 
         // Get session from URL
         const {

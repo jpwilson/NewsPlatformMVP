@@ -98,13 +98,34 @@ export default function AuthPage() {
   // Update the handleGoogleSignIn function
   const handleGoogleSignIn = async () => {
     try {
-      // Determine redirect URL
-      // Ensure we're using the full URL from the current location
-      const currentURL = window.location.href;
-      const baseURL = currentURL.split("/auth")[0];
-      const redirectURL = `${baseURL}/auth-callback`;
+      // Clear any previous errors
+      setError("");
 
-      console.log("OAuth redirect will be to:", redirectURL);
+      // Get the current domain - no matter where we're deployed
+      const currentHostname = window.location.hostname;
+      const currentOrigin = window.location.origin;
+
+      // Always use the current origin for the redirect
+      const redirectURL = `${currentOrigin}/auth-callback`;
+
+      console.log(
+        `[Auth] Signing in with Google, will redirect to: ${redirectURL}`
+      );
+      console.log(`[Auth] Current hostname: ${currentHostname}`);
+
+      // For log information only
+      const isLocalhost =
+        currentHostname === "localhost" || currentHostname === "127.0.0.1";
+      const isVercel = currentHostname.includes("vercel.app");
+
+      console.log(
+        `[Auth] Environment: ${
+          isLocalhost ? "localhost" : isVercel ? "Vercel" : "other"
+        }`
+      );
+      console.log(
+        `[Auth] IMPORTANT: Make sure you've added ${redirectURL} to your Google OAuth allowed redirect URIs`
+      );
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -119,14 +140,16 @@ export default function AuthPage() {
       });
 
       if (error) {
-        console.error("OAuth sign-in error:", error);
+        console.error("[Auth] OAuth sign-in error:", error);
         throw error;
       }
 
-      console.log("OAuth session:", data);
+      console.log("[Auth] OAuth initiated successfully:", data);
     } catch (error) {
-      setError("Failed to sign in with Google");
-      console.error(error);
+      setError(
+        "Failed to sign in with Google. Please make sure you've properly configured Google OAuth."
+      );
+      console.error("[Auth] Error:", error);
     }
   };
 
