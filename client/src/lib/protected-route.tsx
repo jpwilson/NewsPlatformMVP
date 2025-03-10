@@ -9,8 +9,8 @@ export function ProtectedRoute({
   path: string;
   component: () => React.JSX.Element;
 }) {
-  // Get auth context (will include isGuestMode flag)
-  const { user, isLoading, isGuestMode } = useAuth();
+  // Get auth context
+  const { user, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -22,16 +22,7 @@ export function ProtectedRoute({
     );
   }
 
-  // Always allow access in guest mode (for Vercel deployment)
-  if (isGuestMode) {
-    return (
-      <Route path={path}>
-        <Component />
-      </Route>
-    );
-  }
-
-  // Normal authentication flow for local development
+  // Standard authentication flow for all environments
   if (!user) {
     return (
       <Route path={path}>

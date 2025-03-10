@@ -51,11 +51,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 // Handler for /api/user
 async function handleUser(req: VercelRequest, res: VercelResponse) {
-  // Since we can't use sessions easily in serverless, return a guest user for now
-  return res.status(200).json({
-    id: 0,
-    username: 'guest',
-    isGuest: true
+  // Return 401 when not authenticated (standard behavior)
+  return res.status(401).json({
+    error: "Unauthorized",
+    message: "You must be logged in to access this resource"
   });
 }
 
