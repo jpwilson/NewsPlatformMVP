@@ -12,8 +12,68 @@ let supabase: SupabaseClient | null = null;
 try {
   supabase = createClient(HARDCODED_SUPABASE_URL, HARDCODED_SUPABASE_KEY);
   console.log('Supabase client created successfully with hardcoded values');
+  
+  // Try to create helper functions to assist with joins
+  createHelperFunctions()
+    .catch(err => console.error('Error during helper function creation:', err));
+    
 } catch (error) {
   console.error('Error creating Supabase client:', error);
+}
+
+async function createHelperFunctions() {
+  if (!supabase) return;
+
+  // Try to create a stored function in Supabase that we can use to get articles with channels
+  try {
+    // This SQL will create a function in Supabase that does the join for us
+    const { error } = await supabase.rpc('create_articles_join_function', {
+      sql_function: `
+        CREATE OR REPLACE FUNCTION public.get_articles_with_channels()
+        RETURNS SETOF json AS $$
+        BEGIN
+          RETURN QUERY 
+          SELECT 
+            json_build_object(
+              'id', a.id,
+              'title', a.title,
+              'content', a.content,
+              'channel_id', a.channel_id,
+              'user_id', a.user_id,
+              'category', a.category,
+              'location', a.location,
+              'published', a.published,
+              'created_at', a.created_at,
+              'status', a.status,
+              'last_edited', a.last_edited,
+              'published_at', a.published_at,
+              'view_count', a.view_count,
+              'location_id', a.location_id,
+              'channel', CASE 
+                WHEN c.id IS NOT NULL THEN 
+                  json_build_object('id', c.id, 'name', c.name)
+                ELSE NULL
+              END
+            )
+          FROM 
+            public.articles a
+          LEFT JOIN 
+            public.channels c ON a.channel_id = c.id
+          ORDER BY 
+            a.created_at DESC;
+        END;
+        $$ LANGUAGE plpgsql;
+      `
+    });
+
+    if (error) {
+      console.error('Error creating stored function:', error);
+    } else {
+      console.log('Successfully created/updated the stored function');
+    }
+  } catch (e) {
+    console.error('Exception while creating helper function:', e);
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -39,6 +99,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleArticles(req, res);
     } else if (path.startsWith('/api/debug-articles')) {
       return await debugArticles(req, res);
+    } else if (path.startsWith('/api/init-db')) {
+      return await initDatabase(req, res);
     } else {
       // Default response for unknown routes
       return res.status(404).json({ error: 'Not found' });
@@ -106,33 +168,88 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
   }
   
   try {
-    console.log('Fetching articles from Supabase with full relational query...');
-    // Use the original query with full relational data
-    const { data, error } = await supabase.from('articles').select(`
-      *,
-      channel:channels(id, name)
-    `).order('created_at', { ascending: false });
+    console.log('Fetching articles with multi-approach method...');
     
-    if (error) {
-      // Log the complete error object for better debugging
-      console.error('Error fetching articles:', JSON.stringify(error));
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      });
+    // Try multiple approaches in order of preference
+    
+    // Approach 1: Try using the stored function if available
+    try {
+      console.log('Attempt 1: Using stored function...');
+      const { data, error } = await supabase.rpc('get_articles_with_channels');
       
+      // If this works, return the data immediately
+      if (!error && data) {
+        console.log(`Success with stored function! Got ${data.length} articles.`);
+        return res.status(200).json(data);
+      }
+      
+      console.log('Stored function failed:', error?.message || 'Unknown error');
+    } catch (e) {
+      console.log('Exception during stored function call:', e);
+    }
+    
+    // Approach 2: Try the standard join (this works in local development)
+    try {
+      console.log('Attempt 2: Using standard Supabase join...');
+      const { data, error } = await supabase.from('articles').select(`
+        *,
+        channel:channels(id, name)
+      `).order('created_at', { ascending: false });
+      
+      if (!error && data) {
+        console.log(`Success with standard join! Got ${data.length} articles.`);
+        return res.status(200).json(data);
+      }
+      
+      console.log('Standard join failed:', error?.message || 'Unknown error');
+    } catch (e) {
+      console.log('Exception during standard join:', e);
+    }
+    
+    // Approach 3: Manual join as fallback (guaranteed to work if tables exist)
+    console.log('Attempt 3: Using manual join (fetch articles and channels separately)...');
+    
+    // Get all articles
+    const { data: articles, error: articlesError } = await supabase
+      .from('articles')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (articlesError) {
+      console.error('Error fetching articles:', articlesError);
       return res.status(500).json({
         error: 'Error fetching articles',
-        details: error,
-        message: error.message,
-        url: req.url
+        message: articlesError.message
       });
     }
     
-    console.log(`Successfully fetched ${data?.length || 0} articles`);
-    return res.status(200).json(data || []);
+    // Get all channels for the manual join
+    const { data: channels, error: channelsError } = await supabase
+      .from('channels')
+      .select('*');
+    
+    if (channelsError) {
+      console.error('Error fetching channels for manual join:', channelsError);
+      // If we can't get channels, return just the articles
+      return res.status(200).json(articles);
+    }
+    
+    // Create a map for quick channel lookup
+    const channelMap = channels ? channels.reduce((map, channel) => {
+      map[channel.id] = channel;
+      return map;
+    }, {}) : {};
+    
+    // Manually join the data
+    const articlesWithChannels = articles.map(article => ({
+      ...article,
+      channel: article.channel_id && channelMap[article.channel_id] 
+        ? { id: channelMap[article.channel_id].id, name: channelMap[article.channel_id].name } 
+        : null
+    }));
+    
+    console.log(`Manual join successful! Returning ${articlesWithChannels.length} articles with channels.`);
+    return res.status(200).json(articlesWithChannels);
   } catch (error) {
     console.error('Error in handleArticles:', error);
     return res.status(500).json({
@@ -150,10 +267,41 @@ async function debugArticles(req: VercelRequest, res: VercelResponse) {
   }
   
   try {
-    console.log('Running debug articles queries...');
+    console.log('Running enhanced debug articles queries...');
+    
+    // Add this - get the Supabase client version and details
+    let clientInfo = {};
+    try {
+      // Use safer way to check if the client is initialized
+      clientInfo = {
+        clientInitialized: !!supabase,
+        // Don't try to access protected properties directly
+        clientType: supabase ? 'SupabaseClient' : 'null',
+        schema: 'public', // Default Supabase schema
+        apiVersion: '1', // Default API version
+        restUrl: `${HARDCODED_SUPABASE_URL}/rest/v1`
+      };
+    } catch (e) {
+      clientInfo = { error: String(e) };
+    }
     
     // Try different queries to see which ones work
     const results = {
+      // Add Supabase client info
+      clientInfo,
+      
+      // Additional test: Try a custom raw query that mimics the join
+      rawQuery: await runSafeQuery(async () => {
+        // Use a raw SQL query to test if the issue is with the Supabase query builder
+        const { data, error } = await supabase.rpc('get_articles_with_channels', {});
+        return { data, error };
+      }),
+      
+      // Separate query to check permissions
+      articleCount: await runSafeQuery(() => 
+        supabase.from('articles').select('id', { count: 'exact' })
+      ),
+      
       // Test 1: Simple selection
       simpleSelect: await runSafeQuery(() => 
         supabase.from('articles').select('*').limit(1)
@@ -163,6 +311,36 @@ async function debugArticles(req: VercelRequest, res: VercelResponse) {
       channelsTest: await runSafeQuery(() => 
         supabase.from('channels').select('*').limit(1)
       ),
+      
+      // Try a raw SQL join version
+      manualJoin: await runSafeQuery(async () => {
+        const { data: articles, error: articlesError } = await supabase
+          .from('articles')
+          .select('*')
+          .limit(1);
+          
+        if (articlesError || !articles || articles.length === 0) {
+          return { error: articlesError || 'No articles found' };
+        }
+        
+        const article = articles[0];
+        
+        if (!article.channel_id) {
+          return { data: [{ ...article, channel: null }] };
+        }
+        
+        const { data: channel, error: channelError } = await supabase
+          .from('channels')
+          .select('id, name')
+          .eq('id', article.channel_id)
+          .single();
+          
+        if (channelError) {
+          return { data: [{ ...article, channel: null }], error: channelError };
+        }
+        
+        return { data: [{ ...article, channel }] };
+      }),
       
       // Test 3: Try the join but with limited fields
       simpleJoin: await runSafeQuery(() => 
@@ -181,8 +359,28 @@ async function debugArticles(req: VercelRequest, res: VercelResponse) {
       connectionStatus: {
         supabaseInitialized: !!supabase,
         url: HARDCODED_SUPABASE_URL
+      },
+      
+      // Add request headers for debugging
+      requestHeaders: req.headers,
+      
+      // Add environment info for debugging
+      environment: {
+        nodeEnv: process.env.NODE_ENV,
+        vercelEnv: process.env.VERCEL_ENV,
+        region: process.env.VERCEL_REGION,
+        isProduction: process.env.NODE_ENV === 'production'
       }
     };
+    
+    // Add a function to create the Supabase RPC function if it doesn't exist
+    try {
+      // This will create a stored procedure in Supabase that does the join
+      await supabase.rpc('create_get_articles_function', {});
+    } catch (e) {
+      console.log('Failed to create RPC function:', e);
+      // Ignore errors as this is just a helper
+    }
     
     return res.status(200).json(results);
   } catch (error) {
@@ -190,6 +388,85 @@ async function debugArticles(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ 
       error: 'Debug articles error',
       message: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+// Special handler to initialize the database
+async function initDatabase(req: VercelRequest, res: VercelResponse) {
+  if (!supabase) {
+    return res.status(500).json({ error: 'Supabase client not initialized' });
+  }
+  
+  const results = {
+    steps: [] as { name: string; success: boolean; message?: string }[]
+  };
+  
+  try {
+    // Step 1: Create the function
+    try {
+      const { error } = await supabase.rpc('create_helper_function', {
+        sql: `
+          -- This is a function to help with Supabase permissions
+          CREATE OR REPLACE FUNCTION create_articles_join_function(sql_function TEXT)
+          RETURNS void AS $$
+          BEGIN
+            EXECUTE sql_function;
+          END;
+          $$ LANGUAGE plpgsql;
+          
+          -- Grant permissions
+          GRANT EXECUTE ON FUNCTION create_articles_join_function TO anon, authenticated, service_role;
+        `
+      });
+      
+      results.steps.push({
+        name: 'Create helper function',
+        success: !error,
+        message: error ? error.message : 'Success'
+      });
+    } catch (e) {
+      results.steps.push({
+        name: 'Create helper function',
+        success: false,
+        message: e instanceof Error ? e.message : String(e)
+      });
+    }
+    
+    // Step 2: Create the articles-channels join function
+    await createHelperFunctions();
+    results.steps.push({
+      name: 'Create join function',
+      success: true,
+      message: 'Attempted to create (see logs for details)'
+    });
+    
+    // Step 3: Test the functions
+    try {
+      const { data, error } = await supabase.rpc('get_articles_with_channels');
+      results.steps.push({
+        name: 'Test join function',
+        success: !error,
+        message: error ? error.message : `Success, found ${data?.length || 0} articles`
+      });
+    } catch (e) {
+      results.steps.push({
+        name: 'Test join function',
+        success: false,
+        message: e instanceof Error ? e.message : String(e)
+      });
+    }
+    
+    return res.status(200).json({
+      message: 'Database initialization completed',
+      results
+    });
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    return res.status(500).json({ 
+      error: 'Error initializing database', 
+      message: error instanceof Error ? error.message : String(error),
+      results
     });
   }
 }
