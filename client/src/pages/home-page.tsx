@@ -84,11 +84,17 @@ export default function HomePage() {
     ArticleWithSnakeCase[]
   >({
     queryKey: ["/api/articles"],
+    retry: 3,
+    refetchOnWindowFocus: false,
+    staleTime: 10 * 60 * 1000, // 10 minutes
   });
 
   // Get all channels
   const { data: channels, isLoading: loadingChannels } = useQuery<Channel[]>({
     queryKey: ["/api/channels"],
+    retry: 3,
+    refetchOnWindowFocus: false,
+    staleTime: 10 * 60 * 1000, // 10 minutes
   });
 
   // Extract available categories and locations from articles

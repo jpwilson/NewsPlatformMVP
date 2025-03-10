@@ -13,7 +13,7 @@ function getApiBaseUrl() {
       return 'http://localhost:5001';
     }
     
-    // For Vercel deployment
+    // For Vercel deployment - use relative URLs
     return '';
   }
   
@@ -59,15 +59,22 @@ export async function apiRequest(
     }
   }
   
-  const res = await fetch(fullUrl, {
-    method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  console.log(`Making ${method} request to: ${fullUrl}`);
+  
+  try {
+    const res = await fetch(fullUrl, {
+      method,
+      headers: data ? { "Content-Type": "application/json" } : {},
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
 
-  await throwIfResNotOk(res);
-  return res;
+    await throwIfResNotOk(res);
+    return res;
+  } catch (error) {
+    console.error(`API request failed for ${method} ${fullUrl}:`, error);
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
@@ -76,16 +83,34 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey[0] as string, {
-      credentials: "include",
-    });
-
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    const url = queryKey[0] as string;
+    const isAbsoluteUrl = url.startsWith('http');
+    const isApiUrl = url.startsWith('/api/');
+    
+    let fullUrl = url;
+    if (!isAbsoluteUrl && isApiUrl) {
+      fullUrl = `${API_BASE_URL}${url}`;
     }
+    
+    console.log(`Fetching data from: ${fullUrl}`);
+    
+    try {
+      const res = await fetch(fullUrl, {
+        credentials: "include",
+      });
 
-    await throwIfResNotOk(res);
-    return await res.json();
+      if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+        console.log(`Unauthorized (401) for ${fullUrl}, returning null as configured`);
+        return null;
+      }
+
+      await throwIfResNotOk(res);
+      const data = await res.json();
+      return data;
+    } catch (error) {
+      console.error(`Query failed for ${fullUrl}:`, error);
+      throw error;
+    }
   };
 
 export const queryClient = new QueryClient({
@@ -93,12 +118,13 @@ export const queryClient = new QueryClient({
     queries: {
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
-      refetchOnWindowFocus: false,
-      staleTime: Infinity,
-      retry: false,
+      refetchOnWindowFocus: true,  // Allow refreshing data when window gets focus
+      staleTime: 5 * 60 * 1000,    // Data considered fresh for 5 minutes
+      retry: 3,                    // Retry failed requests 3 times
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     },
     mutations: {
-      retry: false,
+      retry: 1,  // Retry mutations once
     },
   },
 });

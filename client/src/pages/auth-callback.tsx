@@ -45,7 +45,7 @@ export default function AuthCallback() {
         console.log("Server response:", result);
 
         if (result.success) {
-          // Redirect to home page
+          // Redirect to home page using current origin
           window.location.href = "/";
         } else {
           setError(result.error || "Failed to authenticate");
@@ -63,8 +63,14 @@ export default function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-center p-8 bg-white rounded-lg shadow-md">
         <h1 className="text-2xl font-bold mb-4">Authentication Callback</h1>
-        <p className="mb-4">{status}</p>
-        <div className="mt-4 w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin mx-auto"></div>
+        {error ? (
+          <p className="mb-4 text-red-500">{error}</p>
+        ) : (
+          <p className="mb-4">{status}</p>
+        )}
+        {!error && (
+          <div className="mt-4 w-16 h-16 border-t-4 border-blue-500 border-solid rounded-full animate-spin mx-auto"></div>
+        )}
       </div>
     </div>
   );
