@@ -9,19 +9,41 @@ console.log("API Handler initializing");
 console.log("Current directory:", process.cwd());
 console.log("Files in current directory:", fs.existsSync(process.cwd()) ? fs.readdirSync(process.cwd()) : "Cannot read directory");
 console.log("Server directory exists:", fs.existsSync(path.join(process.cwd(), 'server')));
-console.log("Server/routes exists:", fs.existsSync(path.join(process.cwd(), 'server/routes.js')));
-console.log("Server/routes.ts exists:", fs.existsSync(path.join(process.cwd(), 'server/routes.ts')));
 
-// Try importing with dynamic import to provide better error handling
+// List files in server directory
+const serverDir = path.join(process.cwd(), 'server');
+if (fs.existsSync(serverDir)) {
+  console.log("Files in server directory:", fs.readdirSync(serverDir));
+}
+
+// First try importing local routes (safer approach)
 let registerRoutes;
 try {
-  // Try to dynamically import routes
-  console.log("Attempting to import server/routes");
-  const routes = await import('../server/routes');
-  registerRoutes = routes.registerRoutes;
-  console.log("Successfully imported registerRoutes function");
+  console.log("Attempting to import local routes");
+  const { registerRoutes: localRoutes } = await import('./routes');
+  registerRoutes = localRoutes;
+  console.log("Successfully imported local routes function");
 } catch (error) {
-  console.error("Failed to import server/routes:", error);
+  console.error("Failed to import local routes:", error);
+
+  // Fallback to server/routes with explicit extensions
+  try {
+    console.log("Attempting to import server/routes.js");
+    const routes = await import('../server/routes.js');
+    registerRoutes = routes.registerRoutes;
+    console.log("Successfully imported registerRoutes function");
+  } catch (error) {
+    console.error("Failed to import server/routes.js:", error);
+
+    try {
+      console.log("Attempting to import server/routes.ts");
+      const routes = await import('../server/routes.ts');
+      registerRoutes = routes.registerRoutes;
+      console.log("Successfully imported registerRoutes function with .ts extension");
+    } catch (fallbackError) {
+      console.error("Failed to import server/routes.ts:", fallbackError);
+    }
+  }
 }
 
 // Create Express app
@@ -84,6 +106,11 @@ if (registerRoutes) {
     console.log("Routes registered successfully");
   } catch (error) {
     console.error("Error registering routes:", error);
+    
+    // Add direct fallback for essential routes if routes registration fails
+    app.get('/api/health', (req, res) => {
+      res.json({ status: "ok", timestamp: new Date().toISOString() });
+    });
   }
 } else {
   // Add a fallback route to show debugging info
