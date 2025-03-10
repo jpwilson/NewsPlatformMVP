@@ -1,7 +1,28 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import express from 'express';
-import { registerRoutes } from '../server/routes';
 import "dotenv/config";
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Debug logs for deployment
+console.log("API Handler initializing");
+console.log("Current directory:", process.cwd());
+console.log("Files in current directory:", fs.existsSync(process.cwd()) ? fs.readdirSync(process.cwd()) : "Cannot read directory");
+console.log("Server directory exists:", fs.existsSync(path.join(process.cwd(), 'server')));
+console.log("Server/routes exists:", fs.existsSync(path.join(process.cwd(), 'server/routes.js')));
+console.log("Server/routes.ts exists:", fs.existsSync(path.join(process.cwd(), 'server/routes.ts')));
+
+// Try importing with dynamic import to provide better error handling
+let registerRoutes;
+try {
+  // Try to dynamically import routes
+  console.log("Attempting to import server/routes");
+  const routes = await import('../server/routes');
+  registerRoutes = routes.registerRoutes;
+  console.log("Successfully imported registerRoutes function");
+} catch (error) {
+  console.error("Failed to import server/routes:", error);
+}
 
 // Create Express app
 const app = express();
@@ -55,8 +76,27 @@ app.use((req, res, next) => {
   next();
 });
 
-// Register API routes
-registerRoutes(app);
+// Register API routes if available
+if (registerRoutes) {
+  console.log("Registering routes");
+  try {
+    registerRoutes(app);
+    console.log("Routes registered successfully");
+  } catch (error) {
+    console.error("Error registering routes:", error);
+  }
+} else {
+  // Add a fallback route to show debugging info
+  app.get('/api/*', (req, res) => {
+    res.status(500).json({
+      error: "API routes not registered due to module loading issues",
+      path: req.path,
+      cwd: process.cwd(),
+      env: process.env.NODE_ENV,
+      serverExists: fs.existsSync(path.join(process.cwd(), 'server')),
+    });
+  });
+}
 
 // Error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -71,6 +111,8 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  console.log("API request received:", req.method, req.url);
+  
   // Forward to express app
   return new Promise((resolve) => {
     // Create a custom middleware to handle the request
