@@ -11,11 +11,8 @@ export default function AuthCallback() {
       try {
         setStatus("Getting session from URL...");
 
-        // Log hash for debugging
-        console.log("Full URL:", window.location.href);
-        console.log("URL hash:", window.location.hash);
-        console.log("URL search:", window.location.search);
-        console.log("URL origin:", window.location.origin);
+        console.log("[Auth Callback] Starting authentication callback process");
+        console.log("[Auth Callback] Current URL:", window.location.href);
 
         // Get session from URL
         const {
@@ -24,14 +21,14 @@ export default function AuthCallback() {
         } = await supabase.auth.getSession();
 
         if (sessionError) {
-          console.error("Session error:", sessionError);
+          console.error("[Auth Callback] Session error:", sessionError);
           setError(sessionError.message);
           setDebug({ type: "session_error", details: sessionError });
           return;
         }
 
         if (!session) {
-          console.error("No session found");
+          console.error("[Auth Callback] No session found");
           setError("No session found");
           setDebug({ type: "no_session" });
           return;
@@ -39,38 +36,39 @@ export default function AuthCallback() {
 
         // Get user details from session
         const { user } = session;
-        console.log("Supabase user:", user);
+        console.log("[Auth Callback] Supabase user authenticated:", user.id);
         setStatus("User authenticated, sending to backend...");
 
-        // Call your backend to create or get user
-        const response = await fetch("/api/auth/supabase-callback", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            supabase_uid: user.id,
-            email: user.email,
-            name: user.user_metadata?.full_name || user.user_metadata?.name,
-          }),
-        });
+        try {
+          // Call your backend to create or get user
+          const response = await fetch("/api/auth/supabase-callback", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              supabase_uid: user.id,
+              email: user.email,
+              name: user.user_metadata?.full_name || user.user_metadata?.name,
+            }),
+          });
 
-        const result = await response.json();
-        console.log("Server response:", result);
-        setDebug({ type: "server_response", details: result });
-
-        if (result.success) {
+          const result = await response.json();
+          console.log("[Auth Callback] Server response:", result);
           setStatus("Authentication successful, redirecting...");
-          // Don't use window.location.origin which could be localhost on deployed sites
-          // Look at the current URL without the path
-          const baseUrl = window.location.href.split("/auth-callback")[0];
-          console.log("Redirecting to:", baseUrl);
-          window.location.href = baseUrl;
-        } else {
-          setError(result.error || "Failed to authenticate");
+        } catch (err) {
+          // If API call fails, try to continue anyway since we have the Supabase session
+          console.error("[Auth Callback] API call error, but continuing:", err);
         }
+
+        // ALWAYS use the current URL's origin for the redirect, never localhost
+        const currentOrigin = window.location.origin;
+        console.log("[Auth Callback] Redirecting to:", currentOrigin);
+
+        // Force redirect to the root of the current domain
+        window.location.href = currentOrigin;
       } catch (err) {
-        console.error("Error in auth callback:", err);
+        console.error("[Auth Callback] Error in auth callback:", err);
         setError("An unexpected error occurred");
         setDebug({ type: "unexpected_error", error: String(err) });
       }
@@ -98,6 +96,7 @@ export default function AuthCallback() {
             <h3 className="font-bold mb-2">Debug Info:</h3>
             <pre>{JSON.stringify(debug, null, 2)}</pre>
             <p className="mt-2">URL: {window.location.href}</p>
+            <p>Origin: {window.location.origin}</p>
           </div>
         )}
       </div>

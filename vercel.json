@@ -23,6 +23,10 @@
             "destination": "/api/debug.ts"
         },
         {
+            "source": "/api/articles/:id",
+            "destination": "/api/index-simple.ts"
+        },
+        {
             "source": "/api/:match*",
             "destination": "/api/index-simple.ts"
         },

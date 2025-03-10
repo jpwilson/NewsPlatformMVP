@@ -101,30 +101,13 @@ export default function AuthPage() {
       // Clear any previous errors
       setError("");
 
-      // Get the current domain - no matter where we're deployed
-      const currentHostname = window.location.hostname;
+      // IMPORTANT: Use the exact current domain for the redirect URL
       const currentOrigin = window.location.origin;
-
-      // Always use the current origin for the redirect
       const redirectURL = `${currentOrigin}/auth-callback`;
 
+      console.log(`[Google Auth] Using redirect URL: ${redirectURL}`);
       console.log(
-        `[Auth] Signing in with Google, will redirect to: ${redirectURL}`
-      );
-      console.log(`[Auth] Current hostname: ${currentHostname}`);
-
-      // For log information only
-      const isLocalhost =
-        currentHostname === "localhost" || currentHostname === "127.0.0.1";
-      const isVercel = currentHostname.includes("vercel.app");
-
-      console.log(
-        `[Auth] Environment: ${
-          isLocalhost ? "localhost" : isVercel ? "Vercel" : "other"
-        }`
-      );
-      console.log(
-        `[Auth] IMPORTANT: Make sure you've added ${redirectURL} to your Google OAuth allowed redirect URIs`
+        "[Google Auth] Make sure to add this URL to your Google OAuth allowed redirects"
       );
 
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -140,16 +123,16 @@ export default function AuthPage() {
       });
 
       if (error) {
-        console.error("[Auth] OAuth sign-in error:", error);
+        console.error("[Google Auth] OAuth sign-in error:", error);
         throw error;
       }
 
-      console.log("[Auth] OAuth initiated successfully:", data);
+      console.log("[Google Auth] OAuth initiated successfully");
     } catch (error) {
       setError(
         "Failed to sign in with Google. Please make sure you've properly configured Google OAuth."
       );
-      console.error("[Auth] Error:", error);
+      console.error("[Google Auth] Error:", error);
     }
   };
 

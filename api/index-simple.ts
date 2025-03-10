@@ -101,6 +101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await debugArticles(req, res);
     } else if (path.startsWith('/api/init-db')) {
       return await initDatabase(req, res);
+    } else if (path.startsWith('/api/logout')) {
+      return await handleLogout(req, res);
+    } else if (path.startsWith('/api/login')) {
+      return await handleLogin(req, res);
     } else {
       // Default response for unknown routes
       return res.status(404).json({ error: 'Not found' });
@@ -167,6 +171,81 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
     });
   }
   
+  // Extract path to check if it's a request for a specific article
+  const path = req.url?.split('?')[0] || '';
+  const matches = path.match(/\/api\/articles\/(\d+)/);
+  
+  // If this is a request for a specific article by ID
+  if (matches && matches[1]) {
+    const articleId = parseInt(matches[1], 10);
+    console.log(`Fetching single article with ID: ${articleId}`);
+    
+    try {
+      // Try different approaches to fetch a single article
+      
+      // Approach 1: Try standard join with ID filter
+      try {
+        const { data, error } = await supabase
+          .from('articles')
+          .select(`
+            *,
+            channel:channels(id, name)
+          `)
+          .eq('id', articleId)
+          .single();
+          
+        if (!error && data) {
+          console.log(`Success fetching article #${articleId} with standard join`);
+          return res.status(200).json(data);
+        }
+        
+        console.log(`Error fetching article #${articleId} with standard join:`, error?.message);
+      } catch (e) {
+        console.error('Exception in article fetch with join:', e);
+      }
+      
+      // Approach 2: Get the article and channel separately and join manually
+      const { data: article, error: articleError } = await supabase
+        .from('articles')
+        .select('*')
+        .eq('id', articleId)
+        .single();
+        
+      if (articleError) {
+        console.error(`Error fetching article #${articleId}:`, articleError);
+        return res.status(404).json({ 
+          error: 'Article not found',
+          details: articleError
+        });
+      }
+      
+      // If we have an article with a channel_id, fetch its channel
+      if (article && article.channel_id) {
+        const { data: channel, error: channelError } = await supabase
+          .from('channels')
+          .select('id, name')
+          .eq('id', article.channel_id)
+          .single();
+          
+        // Return the article with its channel
+        return res.status(200).json({
+          ...article,
+          channel: channelError ? null : channel
+        });
+      }
+      
+      // If no channel_id or couldn't fetch channel, return just the article
+      return res.status(200).json(article);
+    } catch (error) {
+      console.error(`Error fetching article #${articleId}:`, error);
+      return res.status(500).json({
+        error: 'Error fetching article',
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+  
+  // Otherwise, this is a request for all articles, proceed with existing logic
   try {
     console.log('Fetching articles with multi-approach method...');
     
@@ -469,6 +548,42 @@ async function initDatabase(req: VercelRequest, res: VercelResponse) {
       results
     });
   }
+}
+
+// Add a logout handler
+async function handleLogout(req: VercelRequest, res: VercelResponse) {
+  console.log('Logout request received');
+  try {
+    // For Supabase auth
+    if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Supabase signout error:', error);
+      }
+    }
+    
+    // Always return success even if there's an error with Supabase
+    // This ensures the frontend can clear its state
+    return res.status(200).json({ success: true, message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Error during logout:', error);
+    // Still return success to allow frontend to clear state
+    return res.status(200).json({ success: true, message: 'Logged out with errors' });
+  }
+}
+
+// Add a minimal login handler for testing
+async function handleLogin(req: VercelRequest, res: VercelResponse) {
+  console.log('Login request received', req.body);
+  
+  // Return a dummy user to make testing easier
+  return res.status(200).json({
+    id: 1,
+    username: req.body?.username || 'user',
+    description: 'Test user',
+    supabase_uid: 'test',
+    created_at: new Date()
+  });
 }
 
 // Helper to safely run queries and capture errors

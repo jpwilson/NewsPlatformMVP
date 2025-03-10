@@ -34,7 +34,6 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const [isGuestMode, setIsGuestMode] = useState<boolean>(false);
 
   // Normal authentication for all environments
   const {
