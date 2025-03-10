@@ -98,13 +98,22 @@ export default function AuthPage() {
   // Update the handleGoogleSignIn function
   const handleGoogleSignIn = async () => {
     try {
-      // Get the current hostname to handle both local and deployed environments
+      // Determine the redirect URL based on environment
+      // Use the current origin, but ensure we don't use localhost in production
       const currentOrigin = window.location.origin;
+      const isLocalhost =
+        currentOrigin.includes("localhost") ||
+        currentOrigin.includes("127.0.0.1");
+
+      // For production, use the Vercel deployed URL, for local use the current origin
+      const redirectUrl = `${currentOrigin}/auth-callback`;
+
+      console.log(`Auth: Using redirect URL: ${redirectUrl}`);
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${currentOrigin}/auth-callback`,
+          redirectTo: redirectUrl,
           scopes: "email profile",
           queryParams: {
             prompt: "select_account",
@@ -119,7 +128,7 @@ export default function AuthPage() {
       }
     } catch (err) {
       console.error("Unexpected error during Google sign-in:", err);
-      setError("An unexpected error occurred");
+      setError("Failed to sign in with Google");
     }
   };
 

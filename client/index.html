@@ -3,22 +3,74 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Disable Vercel toolbar -->
+    <title>News Platform</title>
+    <!-- CSS to hide Vercel development toolbar and other utility elements -->
+    <style>
+      /* Hide Vercel toolbar and related elements */
+      [id*="vercel-toolbar"],
+      vercel-live-feedback,
+      [data-vercel-toolbar],
+      [class*="vercel-toolbar"],
+      /* Hide Test DB Connection button */
+      [id*="test-db-connection"],
+      button:has(span:contains("Test DB Connection")),
+      button:contains("Test DB Connection"),
+      a[href*="test-db"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        z-index: -9999 !important;
+      }
+    </style>
+    <!-- JavaScript to remove Vercel toolbar and test elements -->
     <script>
-      // Disable Vercel Toolbar
-      window.addEventListener('load', function() {
-        // Remove Vercel toolbar if it exists
-        const toolbar = document.querySelector('[id*="vercel-toolbar"]');
-        if (toolbar) {
-          toolbar.remove();
+      // Remove Vercel toolbar and test elements
+      function removeVercelElements() {
+        // Function to check if an element or its children contain text
+        function containsText(element, text) {
+          if (element.textContent && element.textContent.includes(text)) {
+            return true;
+          }
+          return false;
         }
         
-        // Disable the Vercel Live Feedback widget
-        const feedbackElements = document.querySelectorAll('vercel-live-feedback');
-        if (feedbackElements.length > 0) {
-          feedbackElements.forEach(el => el.remove());
-        }
-      });
+        // Remove elements by various criteria
+        const selectors = [
+          // Vercel toolbar selectors
+          '[id*="vercel-toolbar"]',
+          'vercel-live-feedback',
+          '[data-vercel-toolbar]',
+          '[class*="vercel-toolbar"]',
+          
+          // Test DB Connection button selectors
+          'button'
+        ];
+        
+        selectors.forEach(selector => {
+          document.querySelectorAll(selector).forEach(el => {
+            // For buttons, only remove if they contain "Test DB Connection" text
+            if (selector === 'button') {
+              if (containsText(el, 'Test DB Connection')) {
+                el.remove();
+              }
+            } else {
+              el.remove();
+            }
+          });
+        });
+      }
+      
+      // Run immediately and also when DOM is loaded
+      removeVercelElements();
+      window.addEventListener('DOMContentLoaded', removeVercelElements);
+      
+      // Run periodically to catch dynamically added elements
+      setInterval(removeVercelElements, 1000);
     </script>
   </head>
   <body>

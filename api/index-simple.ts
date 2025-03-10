@@ -142,7 +142,11 @@ async function handleUser(req: VercelRequest, res: VercelResponse) {
     // Check if we have an authorization header with a token
     const authHeader = req.headers.authorization;
     
+    console.log('User API: Checking authentication');
+    console.log('User API: Authorization header exists:', !!authHeader);
+    
     if (!supabase) {
+      console.error('User API: Supabase client not initialized');
       return res.status(500).json({ 
         error: 'Supabase client not initialized',
         supabaseUrl: !!supabaseUrl,
@@ -152,19 +156,28 @@ async function handleUser(req: VercelRequest, res: VercelResponse) {
     
     // If there's no auth header, return null user (not logged in)
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('User API: No valid authorization header, returning null user');
       return res.status(200).json(null);
     }
     
     // Extract the token
     const token = authHeader.split(' ')[1];
+    console.log('User API: Token extracted, verifying with Supabase');
     
     // Verify the token with Supabase
     const { data, error } = await supabase.auth.getUser(token);
     
-    if (error || !data.user) {
-      console.error('Auth error:', error);
+    if (error) {
+      console.error('User API: Auth error:', error);
       return res.status(200).json(null);
     }
+    
+    if (!data.user) {
+      console.error('User API: No user data returned from Supabase');
+      return res.status(200).json(null);
+    }
+    
+    console.log(`User API: User authenticated successfully: ${data.user.id}`);
     
     // Return the authenticated user
     return res.status(200).json({
@@ -174,7 +187,7 @@ async function handleUser(req: VercelRequest, res: VercelResponse) {
       isGuest: false
     });
   } catch (error) {
-    console.error('Unexpected error in handleUser:', error);
+    console.error('User API: Unexpected error:', error);
     // On error, return null user rather than an error to avoid breaking the frontend
     return res.status(200).json(null);
   }
@@ -226,9 +239,18 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
   try {
     console.log('Handling article request:', req.url);
     
-    // Extract article ID if present in the URL (e.g., /api/articles/123)
-    const urlParts = req.url?.split('/') || [];
-    const articleId = urlParts.length > 3 ? urlParts[3].split('?')[0] : null;
+    // Extract article ID if present in the URL
+    // This needs to be more flexible to work with various URL formats
+    const url = req.url || '';
+    let articleId: string | null = null;
+    
+    // Parse the ID from various possible URL formats
+    const articleIdMatch = url.match(/\/api\/articles\/([^\/\?]+)/);
+    if (articleIdMatch && articleIdMatch[1]) {
+      articleId = articleIdMatch[1];
+    }
+    
+    console.log('Extracted article ID:', articleId);
     
     // Test connection first
     const { data: testData, error: testError } = await supabase!.from('articles').select('count').limit(1);
@@ -248,6 +270,11 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
     if (articleId) {
       console.log(`Fetching specific article with ID: ${articleId}`);
       
+      // For debugging, log all articles first to see if the ID exists
+      const { data: allArticles } = await supabase!.from('articles').select('id');
+      console.log('Available article IDs:', allArticles?.map(a => a.id));
+      
+      // Now fetch the specific article
       const { data: article, error: articleError } = await supabase!
         .from('articles')
         .select('*, channels(name, description), users(username)')
@@ -264,9 +291,11 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
       }
       
       if (!article) {
+        console.log(`Article with ID ${articleId} not found`);
         return res.status(404).json({ error: 'Article not found' });
       }
       
+      console.log(`Successfully found article: ${article.id} - ${article.title}`);
       return res.status(200).json(article);
     }
     
@@ -288,6 +317,7 @@ async function handleArticles(req: VercelRequest, res: VercelResponse) {
       });
     }
     
+    console.log(`Retrieved ${articles?.length || 0} articles`);
     return res.status(200).json(articles || []);
   } catch (error) {
     console.error('Unexpected error in handleArticles:', error);
