@@ -207,48 +207,25 @@ app.get("/api/articles", async (req, res) => {
   try {
     console.log("Fetching articles with channel data from Supabase");
     
-    // First attempt: try to fetch articles with channels using foreign table syntax
-    let { data: articles, error } = await supabase
+    // Fetch articles first
+    const { data: articles, error: articlesError } = await supabase
       .from("articles")
-      .select(`
-        *,
-        channels:channel_id (
-          id,
-          name,
-          description,
-          category,
-          location,
-          bannerImage,
-          profileImage,
-          user_id,
-          created_at
-        )
-      `)
+      .select("*")
       .eq("published", true)
       .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching articles with channels:", error);
       
-      // Fallback to just fetching articles if join doesn't work
-      const { data: articlesOnly, error: articlesError } = await supabase
-        .from("articles")
-        .select("*")
-        .eq("published", true)
-        .order("created_at", { ascending: false });
-        
-      if (articlesError) {
-        console.error("Error fetching articles:", articlesError);
-        return res.status(500).json({ error: "Failed to fetch articles" });
-      }
+    if (articlesError) {
+      console.error("Error fetching articles:", articlesError);
+      return res.status(500).json({ error: "Failed to fetch articles" });
+    }
+    
+    // If we have articles, fetch all needed channels in one query
+    if (articles && articles.length > 0) {
+      // Get unique channel IDs
+      const channelIds = [...new Set(articles.map(article => article.channel_id))].filter(Boolean);
+      console.log(`Found ${channelIds.length} unique channel IDs:`, channelIds);
       
-      articles = articlesOnly;
-      
-      // If we have articles but couldn't join with channels, fetch channels separately and join manually
-      if (articles && articles.length > 0) {
-        const channelIds = [...new Set(articles.map(article => article.channel_id))];
-        console.log(`Fetching ${channelIds.length} channels separately for articles`);
-        
+      if (channelIds.length > 0) {
         const { data: channels, error: channelsError } = await supabase
           .from("channels")
           .select("*")
@@ -256,7 +233,9 @@ app.get("/api/articles", async (req, res) => {
           
         if (channelsError) {
           console.error("Error fetching channels for articles:", channelsError);
-        } else if (channels) {
+        } else if (channels && channels.length > 0) {
+          console.log(`Successfully fetched ${channels.length} channels`);
+          
           // Create a map for quick lookup
           const channelMap = channels.reduce((map, channel) => {
             map[channel.id] = channel;
@@ -264,15 +243,23 @@ app.get("/api/articles", async (req, res) => {
           }, {});
           
           // Attach channel to each article
-          articles = articles.map(article => ({
-            ...article,
-            channels: channelMap[article.channel_id] || null
-          }));
+          const articlesWithChannels = articles.map(article => {
+            const channelId = article.channel_id;
+            const channel = channelId ? channelMap[channelId] : null;
+            return {
+              ...article,
+              channels: channel
+            };
+          });
+          
+          console.log(`Successfully enhanced ${articlesWithChannels.length} articles with channel data`);
+          return res.json(articlesWithChannels || []);
         }
       }
     }
-
-    console.log(`Successfully fetched ${articles?.length || 0} articles`);
+    
+    // Fallback: return articles without channels
+    console.log(`Returning ${articles?.length || 0} articles without channel data`);
     res.json(articles || []);
   } catch (error) {
     console.error("Error fetching articles:", error);
