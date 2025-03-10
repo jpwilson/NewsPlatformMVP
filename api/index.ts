@@ -1,12 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import express from 'express';
 import "dotenv/config";
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client directly
+const supabaseUrl = process.env.SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Create Express app
 const app = express();
 
 // Debug logs for deployment
-console.log("API Handler initializing");
+console.log("API Handler initializing (all-in-one version)");
 console.log("Environment:", process.env.NODE_ENV);
 console.log("Has SUPABASE_URL:", !!process.env.SUPABASE_URL);
 console.log("Has SUPABASE_SERVICE_KEY:", !!process.env.SUPABASE_SERVICE_KEY);
@@ -60,78 +66,85 @@ app.use((req, res, next) => {
   next();
 });
 
-// Import and register routes
-let registerRoutes;
-try {
-  const { registerRoutes: localRoutes } = require('./routes');
-  registerRoutes = localRoutes;
-  console.log("Successfully imported routes with require");
-} catch (error) {
-  console.error("Failed to import routes with require:", error);
-  
-  // Fallback to dynamic import
-  import('./routes').then(module => {
-    console.log("Successfully imported routes with dynamic import");
-    registerRoutes = module.registerRoutes;
-    if (registerRoutes) {
-      try {
-        registerRoutes(app);
-        console.log("Routes registered successfully with dynamic import");
-      } catch (error) {
-        console.error("Error registering routes with dynamic import:", error);
-      }
-    }
-  }).catch(error => {
-    console.error("Failed to import routes with dynamic import:", error);
-  });
-}
+// ===== DIRECT ROUTE IMPLEMENTATIONS =====
 
-// Register routes if available from require
-if (registerRoutes) {
-  try {
-    registerRoutes(app);
-    console.log("Routes registered successfully");
-  } catch (error) {
-    console.error("Error registering routes:", error);
-  }
-}
-
-// Fallback routes for essential endpoints
-app.get('/api/health', (req, res) => {
+// Health check route
+app.get("/api/health", (req, res) => {
   res.json({ 
     status: "ok", 
     timestamp: new Date().toISOString(),
-    fallback: true 
+    env: process.env.NODE_ENV,
+    deployment: "vercel-inline" 
   });
 });
 
-app.get('/api/channels', async (req, res) => {
-  // If this route is hit, the regular routes weren't registered
+// User route
+app.get("/api/user", (req, res) => {
+  // For now, return unauthorized since session handling requires more work
+  return res.sendStatus(401);
+});
+
+// Channels route
+app.get("/api/channels", async (req, res) => {
   try {
-    const { supabase } = await import('./supabase');
-    const { data, error } = await supabase.from('channels').select('*');
-    if (error) throw error;
-    res.json(data || []);
+    console.log("Fetching channels from Supabase");
+    // Fetch all channels from Supabase
+    const { data: channels, error } = await supabase
+      .from("channels")
+      .select("*");
+    
+    if (error) {
+      console.error("Error fetching channels:", error);
+      return res.status(500).json({ error: "Failed to fetch channels" });
+    }
+    
+    console.log(`Successfully fetched ${channels?.length || 0} channels`);
+    
+    // Enrich each channel with subscriber count
+    const enrichedChannels = await Promise.all((channels || []).map(async (channel) => {
+      // Get subscriber count
+      const { count, error: countError } = await supabase
+        .from("subscriptions")
+        .select("*", { count: 'exact', head: true })
+        .eq("channel_id", channel.id);
+        
+      if (countError) {
+        console.error(`Error fetching subscriber count for channel ${channel.id}:`, countError);
+      }
+      
+      return {
+        ...channel,
+        subscriberCount: count || 0
+      };
+    }));
+    
+    res.json(enrichedChannels || []);
   } catch (error) {
-    console.error("Fallback channels error:", error);
-    res.status(500).json({ error: "Failed to fetch channels in fallback route" });
+    console.error("Error fetching channels:", error);
+    res.status(500).json({ error: "Failed to fetch channels", details: String(error) });
   }
 });
 
-app.get('/api/articles', async (req, res) => {
-  // If this route is hit, the regular routes weren't registered
+// Articles route
+app.get("/api/articles", async (req, res) => {
   try {
-    const { supabase } = await import('./supabase');
-    const { data, error } = await supabase
-      .from('articles')
-      .select('*')
-      .eq('published', true)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    res.json(data || []);
+    console.log("Fetching articles from Supabase");
+    const { data: articles, error } = await supabase
+      .from("articles")
+      .select("*")
+      .eq("published", true)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching articles:", error);
+      return res.status(500).json({ error: "Failed to fetch articles" });
+    }
+
+    console.log(`Successfully fetched ${articles?.length || 0} articles`);
+    res.json(articles || []);
   } catch (error) {
-    console.error("Fallback articles error:", error);
-    res.status(500).json({ error: "Failed to fetch articles in fallback route" });
+    console.error("Error fetching articles:", error);
+    res.status(500).json({ error: "Failed to fetch articles", details: String(error) });
   }
 });
 
