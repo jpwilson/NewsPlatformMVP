@@ -125,19 +125,74 @@ app.get("/api/channels", async (req, res) => {
   }
 });
 
-// Articles route
+// Articles route with channel data
 app.get("/api/articles", async (req, res) => {
   try {
-    console.log("Fetching articles from Supabase");
-    const { data: articles, error } = await supabase
+    console.log("Fetching articles with channel data from Supabase");
+    
+    // First attempt: try to fetch articles with channels using foreign table syntax
+    let { data: articles, error } = await supabase
       .from("articles")
-      .select("*")
+      .select(`
+        *,
+        channels:channel_id (
+          id,
+          name,
+          description,
+          category,
+          location,
+          bannerImage,
+          profileImage,
+          user_id,
+          created_at
+        )
+      `)
       .eq("published", true)
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching articles:", error);
-      return res.status(500).json({ error: "Failed to fetch articles" });
+      console.error("Error fetching articles with channels:", error);
+      
+      // Fallback to just fetching articles if join doesn't work
+      const { data: articlesOnly, error: articlesError } = await supabase
+        .from("articles")
+        .select("*")
+        .eq("published", true)
+        .order("created_at", { ascending: false });
+        
+      if (articlesError) {
+        console.error("Error fetching articles:", articlesError);
+        return res.status(500).json({ error: "Failed to fetch articles" });
+      }
+      
+      articles = articlesOnly;
+      
+      // If we have articles but couldn't join with channels, fetch channels separately and join manually
+      if (articles && articles.length > 0) {
+        const channelIds = [...new Set(articles.map(article => article.channel_id))];
+        console.log(`Fetching ${channelIds.length} channels separately for articles`);
+        
+        const { data: channels, error: channelsError } = await supabase
+          .from("channels")
+          .select("*")
+          .in("id", channelIds);
+          
+        if (channelsError) {
+          console.error("Error fetching channels for articles:", channelsError);
+        } else if (channels) {
+          // Create a map for quick lookup
+          const channelMap = channels.reduce((map, channel) => {
+            map[channel.id] = channel;
+            return map;
+          }, {});
+          
+          // Attach channel to each article
+          articles = articles.map(article => ({
+            ...article,
+            channels: channelMap[article.channel_id] || null
+          }));
+        }
+      }
     }
 
     console.log(`Successfully fetched ${articles?.length || 0} articles`);
@@ -145,6 +200,76 @@ app.get("/api/articles", async (req, res) => {
   } catch (error) {
     console.error("Error fetching articles:", error);
     res.status(500).json({ error: "Failed to fetch articles", details: String(error) });
+  }
+});
+
+// Single article route (needed for article detail page)
+app.get("/api/articles/:id", async (req, res) => {
+  try {
+    const articleId = parseInt(req.params.id);
+    if (isNaN(articleId)) {
+      return res.status(400).json({ error: "Invalid article ID" });
+    }
+    
+    console.log(`Fetching article ${articleId} with channel data`);
+    
+    // Fetch article with channel info
+    const { data: article, error } = await supabase
+      .from("articles")
+      .select(`
+        *,
+        channels:channel_id (
+          id,
+          name,
+          description,
+          category,
+          location,
+          bannerImage,
+          profileImage,
+          user_id,
+          created_at
+        )
+      `)
+      .eq("id", articleId)
+      .single();
+
+    if (error) {
+      console.error(`Error fetching article ${articleId}:`, error);
+      
+      // Fallback to just fetching the article
+      const { data: articleOnly, error: articleError } = await supabase
+        .from("articles")
+        .select("*")
+        .eq("id", articleId)
+        .single();
+        
+      if (articleError) {
+        console.error(`Error fetching article ${articleId}:`, articleError);
+        return res.status(404).json({ error: "Article not found" });
+      }
+      
+      // Get the channel separately
+      if (articleOnly && articleOnly.channel_id) {
+        const { data: channel, error: channelError } = await supabase
+          .from("channels")
+          .select("*")
+          .eq("id", articleOnly.channel_id)
+          .single();
+          
+        if (channelError) {
+          console.error(`Error fetching channel for article ${articleId}:`, channelError);
+        } else if (channel) {
+          articleOnly.channels = channel;
+        }
+      }
+      
+      return res.json(articleOnly);
+    }
+
+    res.json(article);
+  } catch (error) {
+    console.error("Error fetching article:", error);
+    res.status(500).json({ error: "Failed to fetch article", details: String(error) });
   }
 });
 
