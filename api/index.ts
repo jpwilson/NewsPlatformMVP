@@ -12,6 +12,10 @@ app.use(express.urlencoded({ extended: false }));
 
 // Add CORS handling
 app.use((req, res, next) => {
+  // Set appropriate CORS headers for production
+  const origin = req.headers.origin;
+  res.header('Access-Control-Allow-Origin', origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') {
