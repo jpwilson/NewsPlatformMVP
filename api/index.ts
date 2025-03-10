@@ -337,6 +337,40 @@ app.get("/api/articles/:id", async (req, res) => {
   }
 });
 
+// Add session-from-hash endpoint to help with authentication
+app.post('/api/auth/session-from-hash', async (req, res) => {
+  try {
+    const { access_token, refresh_token, expires_in, provider_token } = req.body;
+    
+    console.log('Session from hash received:', { 
+      access_token: access_token ? "✓" : "✗", 
+      refresh_token: refresh_token ? "✓" : "✗",
+      expires_in: expires_in ? "✓" : "✗",
+      provider_token: provider_token ? "✓" : "✗"
+    });
+    
+    if (!access_token) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing access token' 
+      });
+    }
+    
+    // Return success response
+    return res.json({ 
+      success: true, 
+      message: 'Session parameters received' 
+    });
+  } catch (error) {
+    console.error('Error in session-from-hash:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error',
+      details: String(error)
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const status = err.status || err.statusCode || 500;

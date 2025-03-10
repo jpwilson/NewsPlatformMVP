@@ -22,12 +22,9 @@
             "handle": "filesystem"
         },
         {
-            "src": "/auth-callback",
-            "dest": "/dist/public/index.html"
-        },
-        {
             "src": "/(.*)",
-            "dest": "/dist/public/index.html"
+            "dest": "/dist/public/index.html",
+            "continue": true
         }
     ]
 }
