@@ -26,7 +26,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    // We'll keep the standard implicit flow for development which works with the React component
-    flowType: isProduction ? 'pkce' : 'implicit'
+    // Use implicit flow for both environments to ensure consistency
+    flowType: 'implicit'
   }
 }); 

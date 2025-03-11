@@ -23,7 +23,7 @@
         },
         {
             "src": "/auth-callback",
-            "dest": "/auth-callback.html"
+            "dest": "/index.html"
         },
         {
             "src": "/assets/(.*)",

@@ -108,14 +108,8 @@ export default function AuthPage() {
       console.log("Initiating Google sign-in from:", window.location.origin);
       console.log("Full URL:", window.location.href);
 
-      // Check if we're in production or development
-      const isProduction = import.meta.env.PROD;
-      console.log("Production mode:", isProduction);
-
-      // Create the redirect URL, using different paths for dev and prod
-      const redirectTo = isProduction
-        ? `${window.location.origin}/auth-callback.html`
-        : `${window.location.origin}/auth-callback`;
+      // Use a consistent path for both environments
+      const redirectTo = `${window.location.origin}/auth-callback`;
 
       console.log("Setting redirect URL to:", redirectTo);
 

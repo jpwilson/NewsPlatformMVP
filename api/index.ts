@@ -248,7 +248,7 @@ app.get("/api/articles", async (req, res) => {
             const channel = channelId ? channelMap[channelId] : null;
             return {
               ...article,
-              channels: channel
+              channel: channel
             };
           });
           
@@ -282,7 +282,7 @@ app.get("/api/articles/:id", async (req, res) => {
       .from("articles")
       .select(`
         *,
-        channels:channel_id (
+        channel:channel_id (
           id,
           name,
           description,
@@ -323,7 +323,7 @@ app.get("/api/articles/:id", async (req, res) => {
         if (channelError) {
           console.error(`Error fetching channel for article ${articleId}:`, channelError);
         } else if (channel) {
-          articleOnly.channels = channel;
+          articleOnly.channel = channel;
         }
       }
       
