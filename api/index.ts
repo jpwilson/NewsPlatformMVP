@@ -79,9 +79,45 @@ app.get("/api/health", (req, res) => {
 });
 
 // User route
-app.get("/api/user", (req, res) => {
-  // For now, return unauthorized since session handling requires more work
-  return res.sendStatus(401);
+app.get("/api/user", async (req, res) => {
+  try {
+    // Extract the Authorization header (if any)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.sendStatus(401);
+    }
+    
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.sendStatus(401);
+    }
+    
+    // Verify the token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('Error verifying user token:', error);
+      return res.sendStatus(401);
+    }
+    
+    // Look up the user in our database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('supabase_uid', user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user in database:', dbError);
+      return res.sendStatus(401);
+    }
+    
+    // Return the user
+    return res.json(dbUser);
+  } catch (error) {
+    console.error('Error in /api/user endpoint:', error);
+    return res.sendStatus(401);
+  }
 });
 
 // Add Supabase callback endpoint for Google OAuth

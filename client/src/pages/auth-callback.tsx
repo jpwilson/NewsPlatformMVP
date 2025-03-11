@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import "../lib/oauth-debug"; // Add debug utilities
+import { useAuth } from "@/hooks/use-auth";
 
 export default function AuthCallback() {
   const [status, setStatus] = useState("Loading...");
   const [error, setError] = useState("");
+  const { refreshUser } = useAuth();
 
   useEffect(() => {
     const handleAuthCallback = async () => {
@@ -100,6 +102,7 @@ export default function AuthCallback() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
             supabase_uid: user.id,
@@ -118,6 +121,10 @@ export default function AuthCallback() {
 
         const result = await response.json();
         console.log("Server response:", result);
+
+        // Use the refreshUser function to update auth state
+        await refreshUser();
+        console.log("User data refreshed to update auth state");
 
         // Redirect to home page ON THE SAME DOMAIN regardless of result
         console.log("Authentication flow complete, redirecting to home page");

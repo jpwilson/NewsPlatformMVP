@@ -27,6 +27,39 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: true,
     // Use implicit flow for both environments to ensure consistency
-    flowType: 'implicit'
+    flowType: 'implicit',
+    storage: {
+      getItem: (key) => {
+        try {
+          const storedSession = globalThis.localStorage?.getItem(key);
+          console.log(`Retrieved session from localStorage: ${key} ${storedSession ? '✓' : '✗'}`);
+          return storedSession;
+        } catch (error) {
+          console.error('Error accessing localStorage:', error);
+          return null;
+        }
+      },
+      setItem: (key, value) => {
+        try {
+          globalThis.localStorage?.setItem(key, value);
+          console.log(`Stored session in localStorage: ${key} ✓`);
+        } catch (error) {
+          console.error('Error setting localStorage:', error);
+        }
+      },
+      removeItem: (key) => {
+        try {
+          globalThis.localStorage?.removeItem(key);
+          console.log(`Removed session from localStorage: ${key} ✓`);
+        } catch (error) {
+          console.error('Error removing from localStorage:', error);
+        }
+      },
+    },
   }
+});
+
+// Add event listener for auth state changes (debugging)
+supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Supabase auth state changed:', event, session ? '✓ Session exists' : '✗ No session');
 }); 
