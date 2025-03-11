@@ -18,6 +18,10 @@ import AuthCallback from "./pages/auth-callback";
 import ProfilePage from "./pages/profile-page";
 import EditArticle from "@/pages/edit-article";
 
+// Check if we're running in production (Vercel) or development
+const isProduction = process.env.NODE_ENV === "production";
+console.log("Environment:", process.env.NODE_ENV);
+
 function Router() {
   return (
     <Switch>
@@ -33,6 +37,7 @@ function Router() {
       <ProtectedRoute path="/articles/:id/edit" component={EditArticle} />
       <Route path="/articles/:id" component={ArticlePage} />
       <Route path="/auth" component={AuthPage} />
+      {/* Use the React component for local dev and both for production */}
       <Route path="/auth-callback" component={AuthCallback} />
       <Route path="/profile" component={ProfilePage} />
       <Route component={NotFound} />

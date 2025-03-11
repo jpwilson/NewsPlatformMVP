@@ -85,10 +85,15 @@ export default function AuthPage() {
         result = await registerMutation.mutateAsync({ username, password });
       }
 
-      if (result.success) {
-        setLocation("/");
+      if (result && "success" in result && "error" in result) {
+        if (result.success) {
+          setLocation("/");
+        } else {
+          setError((result.error as string) || "Authentication failed");
+        }
       } else {
-        setError(result.error || "Authentication failed");
+        // Regular user object from login
+        setLocation("/");
       }
     } catch (err) {
       setError("An unexpected error occurred");
@@ -103,15 +108,22 @@ export default function AuthPage() {
       console.log("Initiating Google sign-in from:", window.location.origin);
       console.log("Full URL:", window.location.href);
 
-      // Create the redirect URL, ensuring it uses the current domain
-      const redirectTo = `${window.location.origin}/auth-callback`;
+      // Check if we're in production or development
+      const isProduction = import.meta.env.PROD;
+      console.log("Production mode:", isProduction);
+
+      // Create the redirect URL, using different paths for dev and prod
+      const redirectTo = isProduction
+        ? `${window.location.origin}/auth-callback.html`
+        : `${window.location.origin}/auth-callback`;
+
       console.log("Setting redirect URL to:", redirectTo);
 
       // Proceed with OAuth sign-in
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo, // Use our explicitly constructed URL
+          redirectTo,
           scopes: "email profile",
           queryParams: {
             prompt: "select_account",

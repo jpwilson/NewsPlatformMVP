@@ -19,8 +19,11 @@
             "dest": "/api/index.ts"
         },
         {
+            "handle": "filesystem"
+        },
+        {
             "src": "/auth-callback",
-            "dest": "/authCallback.html"
+            "dest": "/auth-callback.html"
         },
         {
             "src": "/assets/(.*)",

@@ -12,4 +12,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey); 
+// Get the current domain for auth redirects
+const domain = typeof window !== 'undefined' ? window.location.origin : '';
+console.log('Current domain for auth redirects:', domain);
+
+// Check if we're running in production (Vercel) or development
+const isProduction = import.meta.env.PROD;
+console.log('Running in production mode:', isProduction);
+
+// Create client with appropriate settings based on environment
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    // We'll keep the standard implicit flow for development which works with the React component
+    flowType: isProduction ? 'pkce' : 'implicit'
+  }
+}); 
