@@ -5,8 +5,21 @@ import { createClient } from '@supabase/supabase-js';
 
 // Initialize Supabase client directly
 const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || '';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+// Validate keys
+if (!supabaseUrl) {
+  console.error("CRITICAL ERROR: Missing SUPABASE_URL environment variable");
+}
+if (!supabaseServiceKey) {
+  console.error("CRITICAL ERROR: Missing SUPABASE_SERVICE_KEY environment variable");
+}
+
+// Create two clients - one for auth verification (using the token from the client)
+// and one with admin rights for database operations
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey);
 
 // Create Express app
 const app = express();
@@ -93,7 +106,7 @@ app.get("/api/user", async (req, res) => {
     }
     
     // Verify the token with Supabase
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
     
     if (error || !user) {
       console.error('Error verifying user token:', error);
@@ -418,7 +431,7 @@ app.post("/api/logout", async (req, res) => {
       const token = authHeader.split(' ')[1];
       
       // Sign out from Supabase
-      const { error } = await supabase.auth.signOut();
+      const { error } = await supabaseAuth.auth.signOut();
       
       if (error) {
         console.error('Error during logout:', error);
@@ -437,128 +450,367 @@ app.post("/api/logout", async (req, res) => {
 // Add user channels endpoint
 app.get("/api/user/channels", async (req, res) => {
   try {
+    console.log("User channels endpoint called");
+    
     // Extract the Authorization header (if any)
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found");
       return res.sendStatus(401);
     }
     
     const token = authHeader.split(' ')[1];
     if (!token) {
+      console.log("No token found in Authorization header");
       return res.sendStatus(401);
     }
+    
+    console.log("Verifying user token...");
     
     // Verify the token with Supabase
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
     
-    if (error || !user) {
-      console.error('Error verifying user token:', error);
+    if (userError || !userData.user) {
+      console.error('Error verifying user token:', userError);
       return res.sendStatus(401);
     }
     
+    console.log("User verified, ID:", userData.user.id);
+    
     // Look up the user in our database
+    console.log("Looking up user in database...");
     const { data: dbUser, error: dbError } = await supabase
       .from('users')
       .select('*')
-      .eq('supabase_uid', user.id)
+      .eq('supabase_uid', userData.user.id)
       .single();
     
-    if (dbError || !dbUser) {
+    if (dbError) {
       console.error('Error finding user in database:', dbError);
-      return res.sendStatus(401);
+      if (dbError.code === 'PGRST116') {
+        console.log("No user found in the database with supabase_uid:", userData.user.id);
+      }
+      return res.status(401).json({ error: 'User not found in database', details: dbError });
     }
+    
+    if (!dbUser) {
+      console.log("User not found in database");
+      return res.status(401).json({ error: 'User not found in database' });
+    }
+    
+    console.log("User found in database, ID:", dbUser.id);
     
     // Fetch channels owned by this user
-    const { data: channels, error: channelsError } = await supabase
-      .from('channels')
-      .select('*')
-      .eq('user_id', dbUser.id);
-      
-    if (channelsError) {
-      console.error('Error fetching user channels:', channelsError);
-      return res.status(500).json({ error: 'Failed to fetch user channels' });
+    console.log(`Fetching channels for user ID ${dbUser.id}...`);
+    
+    // First, check if we can query the channels table
+    try {
+      const { count, error: countError } = await supabase
+        .from('channels')
+        .select('*', { count: 'exact', head: true });
+        
+      if (countError) {
+        console.error('Error checking channels table:', countError);
+      } else {
+        console.log(`Total channels in database: ${count || 0}`);
+      }
+    } catch (countErr) {
+      console.error('Unexpected error checking channels table:', countErr);
     }
     
-    console.log(`Found ${channels?.length || 0} channels for user ${dbUser.username}`);
-    
-    // Return the channels
-    return res.json(channels || []);
+    try {
+      const { data: channels, error: channelsError } = await supabase
+        .from('channels')
+        .select('*')
+        .eq('user_id', dbUser.id);
+        
+      if (channelsError) {
+        console.error('Error fetching user channels:', channelsError);
+        return res.status(500).json({ error: 'Failed to fetch user channels', details: channelsError });
+      }
+      
+      console.log(`Found ${channels?.length || 0} channels for user ${dbUser.username}`);
+      console.log('Channel IDs:', channels?.map(c => c.id).join(', ') || 'none');
+      
+      // Return the channels
+      return res.json(channels || []);
+    } catch (channelsErr) {
+      console.error('Unexpected error fetching channels:', channelsErr);
+      return res.status(500).json({ 
+        error: 'Unexpected error fetching channels', 
+        details: String(channelsErr) 
+      });
+    }
   } catch (error) {
     console.error('Error in /api/user/channels endpoint:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: String(error)
+    });
   }
 });
 
 // Add user subscriptions endpoint
 app.get("/api/user/subscriptions", async (req, res) => {
   try {
+    console.log("User subscriptions endpoint called");
+    
     // Extract the Authorization header (if any)
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found");
       return res.sendStatus(401);
     }
     
     const token = authHeader.split(' ')[1];
     if (!token) {
+      console.log("No token found in Authorization header");
       return res.sendStatus(401);
     }
+    
+    console.log("Verifying user token...");
     
     // Verify the token with Supabase
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
     
-    if (error || !user) {
-      console.error('Error verifying user token:', error);
+    if (userError || !userData.user) {
+      console.error('Error verifying user token:', userError);
       return res.sendStatus(401);
     }
     
+    console.log("User verified, ID:", userData.user.id);
+    
     // Look up the user in our database
+    console.log("Looking up user in database...");
     const { data: dbUser, error: dbError } = await supabase
       .from('users')
       .select('*')
-      .eq('supabase_uid', user.id)
+      .eq('supabase_uid', userData.user.id)
       .single();
     
-    if (dbError || !dbUser) {
+    if (dbError) {
       console.error('Error finding user in database:', dbError);
-      return res.sendStatus(401);
+      if (dbError.code === 'PGRST116') {
+        console.log("No user found in the database with supabase_uid:", userData.user.id);
+      }
+      return res.status(401).json({ error: 'User not found in database', details: dbError });
     }
+    
+    if (!dbUser) {
+      console.log("User not found in database");
+      return res.status(401).json({ error: 'User not found in database' });
+    }
+    
+    console.log("User found in database, ID:", dbUser.id);
     
     // Fetch subscriptions for this user
-    const { data: subscriptions, error: subsError } = await supabase
-      .from('subscriptions')
-      .select(`
-        id,
-        channel_id,
-        channels:channel_id (
-          id,
-          name,
-          description,
-          category,
-          location,
-          bannerImage,
-          profileImage
-        )
-      `)
-      .eq('user_id', dbUser.id);
+    console.log(`Fetching subscriptions for user ID ${dbUser.id}...`);
+    
+    // First, check if the subscriptions table exists
+    const { data: tables, error: tablesError } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .eq('table_schema', 'public')
+      .eq('table_name', 'subscriptions');
       
-    if (subsError) {
-      console.error('Error fetching user subscriptions:', subsError);
-      return res.status(500).json({ error: 'Failed to fetch user subscriptions' });
+    if (tablesError) {
+      console.error('Error checking tables:', tablesError);
+    } else {
+      console.log('Subscriptions table exists:', tables && tables.length > 0);
     }
     
-    // Format the response to match what the frontend expects
-    const formattedSubscriptions = subscriptions?.map(sub => ({
-      id: sub.id,
-      channel: sub.channels
-    })) || [];
-    
-    console.log(`Found ${formattedSubscriptions.length} subscriptions for user ${dbUser.username}`);
-    
-    // Return the subscriptions
-    return res.json(formattedSubscriptions);
+    // Fetch subscriptions with a more resilient approach
+    try {
+      const { data: subscriptions, error: subsError } = await supabase
+        .from('subscriptions')
+        .select(`
+          id,
+          channel_id,
+          channels:channel_id (
+            id,
+            name,
+            description,
+            category,
+            location,
+            bannerImage,
+            profileImage
+          )
+        `)
+        .eq('user_id', dbUser.id);
+        
+      if (subsError) {
+        console.error('Error fetching user subscriptions:', subsError);
+        return res.status(500).json({ error: 'Failed to fetch user subscriptions', details: subsError });
+      }
+      
+      // Format the response to match what the frontend expects
+      const formattedSubscriptions = subscriptions?.map(sub => ({
+        id: sub.id,
+        channel: sub.channels
+      })) || [];
+      
+      console.log(`Found ${formattedSubscriptions.length} subscriptions for user ${dbUser.username}`);
+      
+      // Return the subscriptions
+      return res.json(formattedSubscriptions);
+    } catch (subsErr) {
+      console.error('Unexpected error fetching subscriptions:', subsErr);
+      return res.status(500).json({ 
+        error: 'Unexpected error fetching subscriptions', 
+        details: String(subsErr) 
+      });
+    }
   } catch (error) {
     console.error('Error in /api/user/subscriptions endpoint:', error);
-    return res.status(500).json({ error: 'Server error' });
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: String(error)
+    });
+  }
+});
+
+// Add a debug endpoint
+app.get("/api/debug", async (req, res) => {
+  try {
+    console.log("Debug endpoint called");
+    
+    interface DebugInfo {
+      environment: string;
+      timestamp: string;
+      supabaseUrl: string;
+      supabaseServiceKey: string;
+      supabaseAnonKey: string;
+      envVars: {
+        NODE_ENV?: string;
+        VERCEL?: string;
+        VERCEL_ENV?: string;
+        VERCEL_URL?: string;
+        VERCEL_REGION?: string;
+      };
+      dbConnection?: {
+        status: string;
+        tables?: string[];
+        message?: string;
+        code?: string;
+      };
+      usersTable?: {
+        status: string;
+        count?: number | null;
+        message?: string;
+      };
+      channelsTable?: {
+        status: string;
+        count?: number | null;
+        message?: string;
+      };
+      subscriptionsTable?: {
+        status: string;
+        count?: number | null;
+        message?: string;
+      };
+    }
+    
+    const debugInfo: DebugInfo = {
+      environment: process.env.NODE_ENV || 'unknown',
+      timestamp: new Date().toISOString(),
+      supabaseUrl: supabaseUrl ? "✓ Set" : "✗ Missing",
+      supabaseServiceKey: supabaseServiceKey ? "✓ Set" : "✗ Missing",
+      supabaseAnonKey: supabaseAnonKey ? "✓ Set" : "✗ Missing",
+      envVars: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
+        VERCEL_ENV: process.env.VERCEL_ENV,
+        VERCEL_URL: process.env.VERCEL_URL,
+        VERCEL_REGION: process.env.VERCEL_REGION
+      }
+    };
+    
+    // Test database connection
+    try {
+      // Check if we can access the database schema
+      const { data: tables, error: tablesError } = await supabase
+        .from('information_schema.tables')
+        .select('table_name')
+        .eq('table_schema', 'public')
+        .limit(10);
+        
+      if (tablesError) {
+        debugInfo.dbConnection = {
+          status: "error",
+          message: tablesError.message,
+          code: tablesError.code
+        };
+      } else {
+        debugInfo.dbConnection = {
+          status: "success",
+          tables: tables?.map(t => t.table_name) || []
+        };
+        
+        // Check users table
+        const { count: userCount, error: userError } = await supabase
+          .from('users')
+          .select('*', { count: 'exact', head: true });
+          
+        if (userError) {
+          debugInfo.usersTable = {
+            status: "error",
+            message: userError.message
+          };
+        } else {
+          debugInfo.usersTable = {
+            status: "success",
+            count: userCount
+          };
+        }
+        
+        // Check channels table
+        const { count: channelCount, error: channelError } = await supabase
+          .from('channels')
+          .select('*', { count: 'exact', head: true });
+          
+        if (channelError) {
+          debugInfo.channelsTable = {
+            status: "error",
+            message: channelError.message
+          };
+        } else {
+          debugInfo.channelsTable = {
+            status: "success",
+            count: channelCount
+          };
+        }
+        
+        // Check subscriptions table
+        const { count: subCount, error: subError } = await supabase
+          .from('subscriptions')
+          .select('*', { count: 'exact', head: true });
+          
+        if (subError) {
+          debugInfo.subscriptionsTable = {
+            status: "error",
+            message: subError.message
+          };
+        } else {
+          debugInfo.subscriptionsTable = {
+            status: "success",
+            count: subCount
+          };
+        }
+      }
+    } catch (dbError) {
+      debugInfo.dbConnection = {
+        status: "exception",
+        message: String(dbError)
+      };
+    }
+    
+    return res.json(debugInfo);
+  } catch (error) {
+    console.error('Error in debug endpoint:', error);
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: String(error)
+    });
   }
 });
 
