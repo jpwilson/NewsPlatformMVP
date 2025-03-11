@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Channel } from "@shared/schema";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSelectedChannel } from "@/hooks/use-selected-channel";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -34,6 +34,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+
+// Define type for the debug endpoint response
+interface DebugChannelsResponse {
+  success: boolean;
+  message: string;
+  channels: Channel[];
+  count: number;
+}
 
 export function NavigationBar({
   hideAuthButtons = false,
@@ -85,27 +93,59 @@ export function NavigationBar({
     enabled: !!user,
   });
 
+  // Use debug endpoint as fallback for channels
+  const { data: debugChannelsData } = useQuery<DebugChannelsResponse>({
+    queryKey: ["/api/debug/channels", user?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/debug/channels?userId=${user?.id}`);
+      if (!response.ok) {
+        throw new Error(`Error fetching debug channels: ${response.status}`);
+      }
+      return response.json();
+    },
+    enabled: !!user && (!userChannels || userChannels.length === 0),
+  });
+
+  // Combine channels from both sources
+  const combinedUserChannels = useMemo(() => {
+    if (userChannels?.length) {
+      return userChannels;
+    }
+
+    if (debugChannelsData && "channels" in debugChannelsData) {
+      return debugChannelsData.channels.filter((channel: Channel) => {
+        const channelUserId = (channel as any).user_id || channel.userId;
+        return channelUserId === user?.id;
+      });
+    }
+
+    return [];
+  }, [userChannels, debugChannelsData, user?.id]);
+
   useEffect(() => {
-    if (userChannels) {
+    if (combinedUserChannels?.length) {
       console.log(
         "NavigationBar - User Channels:",
-        userChannels.map((c) => ({ id: c.id, name: c.name }))
+        combinedUserChannels.map((c) => ({ id: c.id, name: c.name }))
       );
     }
-  }, [userChannels]);
+  }, [combinedUserChannels]);
 
   // Get the selected channel or default to the first one
   const selectedChannel =
-    userChannels && effectiveChannelId
-      ? userChannels.find((c) => c.id === effectiveChannelId)
+    combinedUserChannels && effectiveChannelId
+      ? combinedUserChannels.find((c) => c.id === effectiveChannelId)
       : null;
 
   // Get the user's primary channel (first one they created)
   const displayedChannel =
     selectedChannel ||
-    (userChannels && userChannels.length > 0 ? userChannels[0] : null);
+    (combinedUserChannels && combinedUserChannels.length > 0
+      ? combinedUserChannels[0]
+      : null);
 
-  const hasMultipleChannels = userChannels && userChannels.length > 1;
+  const hasMultipleChannels =
+    combinedUserChannels && combinedUserChannels.length > 1;
 
   useEffect(() => {
     console.log("NavigationBar - Selected Channel:", selectedChannel);
@@ -192,7 +232,7 @@ export function NavigationBar({
                       <CollapsibleContent>
                         {hasMultipleChannels && (
                           <div className="pl-7 space-y-2 mt-1">
-                            {userChannels?.map((channel) => (
+                            {combinedUserChannels?.map((channel) => (
                               <div
                                 key={channel.id}
                                 className={`text-sm py-1 cursor-pointer ${
@@ -289,8 +329,8 @@ export function NavigationBar({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {/* List all user channels */}
-                {userChannels &&
-                  userChannels.map((channel) => (
+                {combinedUserChannels &&
+                  combinedUserChannels.map((channel) => (
                     <DropdownMenuItem
                       key={channel.id}
                       onClick={() => navigateToChannel(channel.id)}

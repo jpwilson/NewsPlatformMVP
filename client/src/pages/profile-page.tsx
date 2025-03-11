@@ -68,9 +68,22 @@ type SortDirection = "asc" | "desc";
 
 // Define the type for the debug endpoint response
 interface DebugChannelsResponse {
-  channels: Channel[];
-  count: number;
+  success: boolean;
   message: string;
+  count: number;
+  channels: Channel[];
+}
+
+// Define a type for the debug subscriptions response
+interface DebugSubscriptionsResponse {
+  success: boolean;
+  message: string;
+  count: number;
+  subscriptions: Array<{
+    id: number;
+    channel: Channel | null;
+    channelId: number;
+  }>;
 }
 
 // Helper function to format date safely
@@ -134,16 +147,34 @@ export default function ProfilePage() {
     enabled: !!user && !!isOwnProfile, // Only fetch owned channels for own profile when user is logged in
   });
 
-  // Fetch debug channels for jeanpaulwilson
+  // Add direct API query for owned channels (for debugging in Vercel)
   const { data: debugChannelsData, isLoading: loadingDebugChannels } =
     useQuery<DebugChannelsResponse>({
-      queryKey: ["/api/debug/jpwchannels"],
+      queryKey: ["/api/debug/channels", user?.id],
       queryFn: async () => {
-        const response = await fetch("/api/debug/jpwchannels");
+        const response = await fetch(`/api/debug/channels?userId=${user?.id}`);
         if (!response.ok) {
           throw new Error(`Error fetching debug channels: ${response.status}`);
         }
         return response.json() as Promise<DebugChannelsResponse>;
+      },
+      enabled: isOwnProfile && !!user ? true : false,
+    });
+
+  // Add direct API query for user subscriptions (for debugging in Vercel)
+  const { data: debugSubscriptionsData, isLoading: loadingDebugSubscriptions } =
+    useQuery<DebugSubscriptionsResponse>({
+      queryKey: ["/api/debug/subscriptions", user?.id],
+      queryFn: async () => {
+        const response = await fetch(
+          `/api/debug/subscriptions?userId=${user?.id}`
+        );
+        if (!response.ok) {
+          throw new Error(
+            `Error fetching debug subscriptions: ${response.status}`
+          );
+        }
+        return response.json() as Promise<DebugSubscriptionsResponse>;
       },
       enabled: isOwnProfile && !!user ? true : false,
     });
@@ -158,6 +189,31 @@ export default function ProfilePage() {
     }
     return [];
   }, [ownedChannels, debugChannelsData]);
+
+  // Combine subscriptions from both sources
+  const combinedSubscribedChannels = useMemo(() => {
+    if (subscribedChannels?.length) {
+      return subscribedChannels;
+    }
+
+    // Add a type check for debugSubscriptionsData
+    if (
+      debugSubscriptionsData &&
+      typeof debugSubscriptionsData === "object" &&
+      "subscriptions" in debugSubscriptionsData
+    ) {
+      // Map the debug subscriptions to match the expected SubscribedChannel format
+      return debugSubscriptionsData.subscriptions
+        .filter((sub: any) => sub.channel !== null)
+        .map((sub: any) => ({
+          ...sub.channel,
+          subscriberCount: 0, // We don't have this info in the debug response
+          subscriptionDate: new Date().toISOString(), // Use current date as fallback
+        })) as SubscribedChannel[];
+    }
+
+    return [];
+  }, [subscribedChannels, debugSubscriptionsData]);
 
   // Initialize description state from user data when available
   useEffect(() => {
@@ -216,12 +272,12 @@ export default function ProfilePage() {
     }
   };
 
-  // Filter and sort subscribed channels
+  // Update the filteredAndSortedChannels reference to use the combined data
   const filteredAndSortedChannels = useMemo(() => {
-    if (!subscribedChannels) return [];
+    if (!combinedSubscribedChannels.length) return [];
 
     // First filter by search query
-    const filtered = subscribedChannels.filter((channel) => {
+    const filtered = combinedSubscribedChannels.filter((channel) => {
       return (
         !searchQuery ||
         channel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -251,7 +307,7 @@ export default function ProfilePage() {
 
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [subscribedChannels, searchQuery, sortField, sortDirection]);
+  }, [combinedSubscribedChannels, searchQuery, sortField, sortDirection]);
 
   // Add debug endpoint fallback for subscriptions
   useEffect(() => {
@@ -262,7 +318,7 @@ export default function ProfilePage() {
         console.log("Subscriptions failed to load, try debug API instead");
 
         try {
-          const response = await fetch("/api/debug/jpwchannels");
+          const response = await fetch(`/api/debug/channels?userId=${user.id}`);
           const data = await response.json();
           console.log("Debug endpoint result:", data);
 
@@ -287,10 +343,15 @@ export default function ProfilePage() {
     return <Redirect to="/auth" />;
   }
 
-  if (
+  // Check for loading state
+  const isLoading =
     loadingProfile ||
-    (isOwnProfile && (loadingSubscriptions || loadingOwnedChannels))
-  ) {
+    (isOwnProfile &&
+      (loadingSubscriptions ||
+        loadingOwnedChannels ||
+        loadingDebugSubscriptions));
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
         <NavigationBar />
@@ -508,12 +569,12 @@ export default function ProfilePage() {
                 <CardTitle>Channel Subscriptions</CardTitle>
                 <CardDescription>
                   You are currently subscribed to{" "}
-                  {subscribedChannels?.length || 0} channel
-                  {subscribedChannels?.length !== 1 ? "s" : ""}
+                  {combinedSubscribedChannels?.length || 0} channel
+                  {combinedSubscribedChannels?.length !== 1 ? "s" : ""}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {!subscribedChannels?.length ? (
+                {!combinedSubscribedChannels?.length ? (
                   <div className="text-center py-4 text-muted-foreground">
                     Not yet subscribed to any channels
                   </div>

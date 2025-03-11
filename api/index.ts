@@ -284,20 +284,34 @@ app.get("/api/channels", async (req, res) => {
     
     // Enrich each channel with subscriber count
     const enrichedChannels = await Promise.all((channels || []).map(async (channel) => {
-      // Get subscriber count
-      const { count, error: countError } = await supabase
-        .from("subscriptions")
-        .select("*", { count: 'exact', head: true })
-        .eq("channel_id", channel.id);
+      // Get subscriber count using a more direct approach that works in all environments
+      try {
+        const { count, error: countError } = await supabase
+          .from("subscriptions")
+          .select("*", { count: 'exact', head: true })
+          .eq("channel_id", channel.id);
+          
+        if (countError) {
+          console.error(`Error fetching subscriber count for channel ${channel.id}:`, countError);
+          return {
+            ...channel,
+            subscriberCount: 0
+          };
+        }
         
-      if (countError) {
-        console.error(`Error fetching subscriber count for channel ${channel.id}:`, countError);
+        console.log(`Channel ${channel.id} (${channel.name}) has ${count || 0} subscribers`);
+        
+        return {
+          ...channel,
+          subscriberCount: count || 0
+        };
+      } catch (countError) {
+        console.error(`Unexpected error fetching subscriber count for channel ${channel.id}:`, countError);
+        return {
+          ...channel,
+          subscriberCount: 0
+        };
       }
-      
-      return {
-        ...channel,
-        subscriberCount: count || 0
-      };
     }));
     
     res.json(enrichedChannels || []);
@@ -781,63 +795,7 @@ app.get("/api/user/subscriptions", async (req, res) => {
           const userId = userByUsername.id;
           console.log(`Using user ID ${userId} found by username instead`);
           
-          try {
-            // FIX: Get subscriptions separately first (no foreign key relationship)
-            const { data: subscriptions, error: subsError } = await supabase
-              .from('subscriptions')
-              .select('id, channel_id')
-              .eq('user_id', userId);
-              
-            if (subsError) {
-              console.error('Error fetching user subscriptions via fallback:', subsError);
-              return res.status(500).json({ error: 'Failed to fetch user subscriptions', details: subsError });
-            }
-            
-            // If no subscriptions, return empty array
-            if (!subscriptions || subscriptions.length === 0) {
-              console.log('No subscriptions found for user');
-              return res.json([]);
-            }
-            
-            // Get the channel IDs
-            const channelIds = subscriptions.map(sub => sub.channel_id);
-            console.log('Found subscription channel IDs:', channelIds);
-            
-            // Now fetch the channel data separately
-            const { data: channels, error: channelsError } = await supabase
-              .from('channels')
-              .select('*')
-              .in('id', channelIds);
-              
-            if (channelsError) {
-              console.error('Error fetching channels for subscriptions:', channelsError);
-              return res.status(500).json({ error: 'Failed to fetch subscription channels', details: channelsError });
-            }
-            
-            // Create a map of channel id to channel data
-            const channelMap = {};
-            if (channels) {
-              channels.forEach(channel => {
-                channelMap[channel.id] = channel;
-              });
-            }
-            
-            // Format the response to match what the frontend expects
-            const formattedSubscriptions = subscriptions.map(sub => ({
-              id: sub.id,
-              channel: channelMap[sub.channel_id] || null
-            }));
-            
-            console.log(`Found ${formattedSubscriptions.length} subscriptions with channel data for user ${username} via fallback method`);
-            
-            return res.json(formattedSubscriptions);
-          } catch (fallbackSubsErr) {
-            console.error('Unexpected error in fallback subscriptions fetch:', fallbackSubsErr);
-            return res.status(500).json({ 
-              error: 'Unexpected error fetching subscriptions', 
-              details: String(fallbackSubsErr) 
-            });
-          }
+          return handleUserSubscriptions(userId, res);
         }
       }
       
@@ -852,10 +810,22 @@ app.get("/api/user/subscriptions", async (req, res) => {
     const userId = dbUser.id;
     console.log("User found in database, ID:", userId);
     
-    // Fetch subscriptions for this user
+    return handleUserSubscriptions(userId, res);
+  } catch (error) {
+    console.error('Error in /api/user/subscriptions endpoint:', error);
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: String(error)
+    });
+  }
+});
+
+// Helper function to handle getting user subscriptions by ID
+async function handleUserSubscriptions(userId: number, res: any) {
+  try {
     console.log(`Fetching subscriptions for user ID ${userId}...`);
     
-    // FIX: Get subscriptions separately first (no foreign key relationship)
+    // First get just the subscription records
     const { data: subscriptions, error: subsError } = await supabase
       .from('subscriptions')
       .select('id, channel_id')
@@ -872,9 +842,9 @@ app.get("/api/user/subscriptions", async (req, res) => {
       return res.json([]);
     }
     
-    // Get the channel IDs
+    console.log(`Found ${subscriptions.length} subscriptions for user ${userId}`);
     const channelIds = subscriptions.map(sub => sub.channel_id);
-    console.log('Found subscription channel IDs:', channelIds);
+    console.log('Subscription channel IDs:', channelIds);
     
     // Now fetch the channel data separately
     const { data: channels, error: channelsError } = await supabase
@@ -885,6 +855,191 @@ app.get("/api/user/subscriptions", async (req, res) => {
     if (channelsError) {
       console.error('Error fetching channels for subscriptions:', channelsError);
       return res.status(500).json({ error: 'Failed to fetch subscription channels', details: channelsError });
+    }
+    
+    console.log(`Found ${channels?.length || 0} channels for subscriptions`);
+    
+    // If no channels found or fewer channels than subscriptions, log warning
+    if (!channels || channels.length < subscriptions.length) {
+      console.warn(`Warning: Found fewer channels (${channels?.length || 0}) than subscriptions (${subscriptions.length})`);
+    }
+    
+    // Create a map of channel id to channel data
+    const channelMap = {};
+    if (channels) {
+      channels.forEach(channel => {
+        channelMap[channel.id] = channel;
+      });
+    }
+    
+    // Enrich each channel with subscriber count
+    for (const channelId in channelMap) {
+      try {
+        const { count, error: countError } = await supabase
+          .from("subscriptions")
+          .select("*", { count: 'exact', head: true })
+          .eq("channel_id", channelId);
+          
+        if (!countError) {
+          channelMap[channelId].subscriberCount = count || 0;
+        }
+      } catch (error) {
+        console.error(`Error getting subscriber count for channel ${channelId}:`, error);
+      }
+    }
+    
+    // Format the response to match what the frontend expects
+    const formattedSubscriptions = subscriptions.map(sub => {
+      const channel = channelMap[sub.channel_id];
+      return {
+        ...sub,
+        channel,
+        subscriptionDate: new Date().toISOString() // Use current date as fallback for now
+      };
+    });
+    
+    console.log(`Returning ${formattedSubscriptions.length} formatted subscriptions`);
+    
+    // Return the subscriptions
+    return res.json(formattedSubscriptions);
+  } catch (error) {
+    console.error('Error handling user subscriptions:', error);
+    return res.status(500).json({ 
+      error: 'Server error', 
+      details: String(error)
+    });
+  }
+}
+
+// Remove the user-specific endpoints and add proper parameterized debug endpoints
+// 1. Debug endpoint for channels with proper query parameters
+app.get("/api/debug/channels", async (req, res) => {
+  try {
+    const userId = req.query.userId ? parseInt(req.query.userId as string) : null;
+    console.log(`Debug endpoint: Fetching channels${userId ? ` for user ID ${userId}` : ' (all channels)'}`);
+    
+    // Build query
+    let query = supabase.from("channels").select("*");
+    
+    // Apply userId filter if provided
+    if (userId) {
+      query = query.eq("user_id", userId);
+    }
+    
+    // Execute query
+    const { data: channels, error } = await query;
+    
+    if (error) {
+      console.error("Debug endpoint error:", error);
+      return res.status(500).json({ 
+        success: false,
+        message: "Error fetching channels", 
+        error: error.message,
+        count: 0,
+        channels: []
+      });
+    }
+    
+    console.log(`Debug endpoint: Found ${channels.length} channels${userId ? ` for user ID ${userId}` : ''}`);
+    
+    // Enrich each channel with subscriber count
+    const enrichedChannels = await Promise.all((channels || []).map(async (channel) => {
+      // Get subscriber count
+      const { count, error: countError } = await supabase
+        .from("subscriptions")
+        .select("*", { count: 'exact', head: true })
+        .eq("channel_id", channel.id);
+        
+      if (countError) {
+        console.error(`Error fetching subscriber count for channel ${channel.id}:`, countError);
+      }
+      
+      return {
+        ...channel,
+        subscriberCount: count || 0
+      };
+    }));
+    
+    return res.status(200).json({ 
+      success: true,
+      message: `Channels found${userId ? ` for user ID ${userId}` : ''}`, 
+      count: enrichedChannels.length,
+      channels: enrichedChannels
+    });
+  } catch (error) {
+    console.error("Debug endpoint unexpected error:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Unexpected error fetching channels", 
+      error: error.message,
+      count: 0,
+      channels: []
+    });
+  }
+});
+
+// 2. Debug endpoint for subscriptions with proper query parameters
+app.get("/api/debug/subscriptions", async (req, res) => {
+  try {
+    const userId = req.query.userId ? parseInt(req.query.userId as string) : null;
+    console.log(`Debug endpoint: Fetching subscriptions${userId ? ` for user ID ${userId}` : ' (all subscriptions)'}`);
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required for fetching subscriptions",
+        count: 0,
+        subscriptions: []
+      });
+    }
+    
+    // Get subscriptions for the specified user
+    const { data: subscriptions, error: subsError } = await supabase
+      .from('subscriptions')
+      .select('id, channel_id')
+      .eq('user_id', userId);
+      
+    if (subsError) {
+      console.error(`Debug endpoint error for subscriptions (user ID ${userId}):`, subsError);
+      return res.status(500).json({ 
+        success: false,
+        message: "Error fetching subscriptions", 
+        error: subsError.message,
+        count: 0,
+        subscriptions: []
+      });
+    }
+    
+    // If no subscriptions, return empty array
+    if (!subscriptions || subscriptions.length === 0) {
+      console.log(`No subscriptions found for user ID ${userId}`);
+      return res.json({ 
+        success: true,
+        message: `No subscriptions found for user ID ${userId}`, 
+        count: 0,
+        subscriptions: [] 
+      });
+    }
+    
+    // Get the channel IDs
+    const channelIds = subscriptions.map(sub => sub.channel_id);
+    console.log(`Found subscription channel IDs for user ${userId}:`, channelIds);
+    
+    // Now fetch the channel data separately
+    const { data: channels, error: channelsError } = await supabase
+      .from('channels')
+      .select('*')
+      .in('id', channelIds);
+      
+    if (channelsError) {
+      console.error(`Error fetching channels for subscriptions (user ID ${userId}):`, channelsError);
+      return res.status(500).json({ 
+        success: false,
+        message: "Error fetching channels for subscriptions", 
+        error: channelsError.message,
+        count: subscriptions.length,
+        subscriptions: subscriptions 
+      });
     }
     
     // Create a map of channel id to channel data
@@ -898,203 +1053,277 @@ app.get("/api/user/subscriptions", async (req, res) => {
     // Format the response to match what the frontend expects
     const formattedSubscriptions = subscriptions.map(sub => ({
       id: sub.id,
-      channel: channelMap[sub.channel_id] || null
+      channel: channelMap[sub.channel_id] || null,
+      channelId: sub.channel_id
     }));
     
-    console.log(`Found ${formattedSubscriptions.length} subscriptions with channel data for user ${dbUser.username}`);
-    
-    // Return the subscriptions
-    return res.json(formattedSubscriptions);
-  } catch (error) {
-    console.error('Error in /api/user/subscriptions endpoint:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      details: String(error)
-    });
-  }
-});
-
-// Add a debug endpoint
-app.get("/api/debug", async (req, res) => {
-  try {
-    console.log("Debug endpoint called");
-    
-    interface DebugInfo {
-      environment: string;
-      timestamp: string;
-      supabaseUrl: string;
-      supabaseServiceKey: string;
-      supabaseAnonKey: string;
-      envVars: {
-        NODE_ENV?: string;
-        VERCEL?: string;
-        VERCEL_ENV?: string;
-        VERCEL_URL?: string;
-        VERCEL_REGION?: string;
-      };
-      dbConnection?: {
-        status: string;
-        tables?: string[];
-        message?: string;
-        code?: string;
-      };
-      usersTable?: {
-        status: string;
-        count?: number | null;
-        message?: string;
-      };
-      channelsTable?: {
-        status: string;
-        count?: number | null;
-        message?: string;
-      };
-      subscriptionsTable?: {
-        status: string;
-        count?: number | null;
-        message?: string;
-      };
-    }
-    
-    const debugInfo: DebugInfo = {
-      environment: process.env.NODE_ENV || 'unknown',
-      timestamp: new Date().toISOString(),
-      supabaseUrl: supabaseUrl ? "✓ Set" : "✗ Missing",
-      supabaseServiceKey: supabaseServiceKey ? "✓ Set" : "✗ Missing",
-      supabaseAnonKey: supabaseAnonKey ? "✓ Set" : "✗ Missing",
-      envVars: {
-        NODE_ENV: process.env.NODE_ENV,
-        VERCEL: process.env.VERCEL,
-        VERCEL_ENV: process.env.VERCEL_ENV,
-        VERCEL_URL: process.env.VERCEL_URL,
-        VERCEL_REGION: process.env.VERCEL_REGION
-      }
-    };
-    
-    // Test database connection
-    try {
-      // Check if we can access the database schema
-      const { data: tables, error: tablesError } = await supabase
-        .from('information_schema.tables')
-        .select('table_name')
-        .eq('table_schema', 'public')
-        .limit(10);
-        
-      if (tablesError) {
-        debugInfo.dbConnection = {
-          status: "error",
-          message: tablesError.message,
-          code: tablesError.code
-        };
-      } else {
-        debugInfo.dbConnection = {
-          status: "success",
-          tables: tables?.map(t => t.table_name) || []
-        };
-        
-        // Check users table
-        const { count: userCount, error: userError } = await supabase
-          .from('users')
-          .select('*', { count: 'exact', head: true });
-          
-        if (userError) {
-          debugInfo.usersTable = {
-            status: "error",
-            message: userError.message
-          };
-        } else {
-          debugInfo.usersTable = {
-            status: "success",
-            count: userCount
-          };
-        }
-        
-        // Check channels table
-        const { count: channelCount, error: channelError } = await supabase
-          .from('channels')
-          .select('*', { count: 'exact', head: true });
-          
-        if (channelError) {
-          debugInfo.channelsTable = {
-            status: "error",
-            message: channelError.message
-          };
-        } else {
-          debugInfo.channelsTable = {
-            status: "success",
-            count: channelCount
-          };
-        }
-        
-        // Check subscriptions table
-        const { count: subCount, error: subError } = await supabase
-          .from('subscriptions')
-          .select('*', { count: 'exact', head: true });
-          
-        if (subError) {
-          debugInfo.subscriptionsTable = {
-            status: "error",
-            message: subError.message
-          };
-        } else {
-          debugInfo.subscriptionsTable = {
-            status: "success",
-            count: subCount
-          };
-        }
-      }
-    } catch (dbError) {
-      debugInfo.dbConnection = {
-        status: "exception",
-        message: String(dbError)
-      };
-    }
-    
-    return res.json(debugInfo);
-  } catch (error) {
-    console.error('Error in debug endpoint:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      details: String(error)
-    });
-  }
-});
-
-// Debug endpoint to check channels for user_id 3 (jeanpaulwilson)
-app.get("/api/debug/jpwchannels", async (req, res) => {
-  try {
-    console.log("Debug endpoint: Fetching channels for user_id 3 (jeanpaulwilson)");
-    
-    // Use service key client to directly query the database
-    const { data: channels, error } = await supabase
-      .from("channels")
-      .select("*")
-      .eq("user_id", 3);
-    
-    if (error) {
-      console.error("Debug endpoint error:", error);
-      return res.status(500).json({ 
-        message: "Error fetching channels", 
-        error: error.message,
-        count: 0,
-        channels: []
-      });
-    }
-    
-    console.log(`Debug endpoint: Found ${channels.length} channels for user_id 3`);
-    console.log("Channel IDs:", channels.map(c => c.id).join(", "));
+    console.log(`Debug endpoint: Found ${formattedSubscriptions.length} subscriptions for user ID ${userId}`);
     
     return res.status(200).json({ 
-      message: "Channels found for user_id 3", 
-      count: channels.length,
-      channels 
+      success: true,
+      message: `Subscriptions found for user ID ${userId}`, 
+      count: formattedSubscriptions.length,
+      subscriptions: formattedSubscriptions
     });
   } catch (error) {
     console.error("Debug endpoint unexpected error:", error);
     return res.status(500).json({ 
-      message: "Unexpected error fetching channels", 
+      success: false,
+      message: "Unexpected error fetching subscriptions", 
       error: error.message,
       count: 0,
-      channels: []
+      subscriptions: []
+    });
+  }
+});
+
+// Add a diagnostic endpoint for checking the entire system
+app.get("/api/debug/system", async (req, res) => {
+  try {
+    console.log("System diagnostic endpoint called");
+    
+    interface SystemDebugInfo {
+      environment: string;
+      timestamp: string;
+      supabase: {
+        url: string;
+        serviceKeyPresent: boolean;
+        anonKeyPresent: boolean;
+      };
+      vercel: {
+        isVercel: boolean;
+        environment: string | null;
+        url: string | null;
+        region: string | null;
+      };
+      database: {
+        tables: {
+          status: string;
+          tableNames: string[] | null;
+          error?: string;
+        };
+        counts: {
+          users: { count: number | null; error?: string };
+          channels: { count: number | null; error?: string };
+          subscriptions: { count: number | null; error?: string };
+        };
+        sampleQueries: {
+          userWithId3: { exists: boolean; error?: string };
+          channelsForUser3: { count: number | null; error?: string };
+          subscriptionsForUser3: { count: number | null; error?: string };
+        };
+        schemas: {
+          users: { columns: string[] | null; error?: string };
+          channels: { columns: string[] | null; error?: string };
+          subscriptions: { columns: string[] | null; error?: string };
+        };
+      };
+    }
+    
+    const diagnosticInfo: SystemDebugInfo = {
+      environment: process.env.NODE_ENV || 'unknown',
+      timestamp: new Date().toISOString(),
+      supabase: {
+        url: supabaseUrl ? supabaseUrl.substring(0, 10) + '...' : 'missing',
+        serviceKeyPresent: !!supabaseServiceKey,
+        anonKeyPresent: !!supabaseAnonKey
+      },
+      vercel: {
+        isVercel: process.env.VERCEL === '1',
+        environment: process.env.VERCEL_ENV || null,
+        url: process.env.VERCEL_URL || null,
+        region: process.env.VERCEL_REGION || null
+      },
+      database: {
+        tables: {
+          status: 'pending',
+          tableNames: null
+        },
+        counts: {
+          users: { count: null },
+          channels: { count: null },
+          subscriptions: { count: null }
+        },
+        sampleQueries: {
+          userWithId3: { exists: false },
+          channelsForUser3: { count: null },
+          subscriptionsForUser3: { count: null }
+        },
+        schemas: {
+          users: { columns: null },
+          channels: { columns: null },
+          subscriptions: { columns: null }
+        }
+      }
+    };
+    
+    // Test database schema access
+    try {
+      const { data: tables, error: tablesError } = await supabase
+        .from('information_schema.tables')
+        .select('table_name')
+        .eq('table_schema', 'public');
+      
+      if (tablesError) {
+        diagnosticInfo.database.tables.status = 'error';
+        diagnosticInfo.database.tables.error = tablesError.message;
+      } else {
+        diagnosticInfo.database.tables.status = 'success';
+        diagnosticInfo.database.tables.tableNames = tables?.map(t => t.table_name) || [];
+      }
+    } catch (error) {
+      diagnosticInfo.database.tables.status = 'exception';
+      diagnosticInfo.database.tables.error = String(error);
+    }
+    
+    // Check table counts
+    try {
+      const { count: userCount, error: userError } = await supabase
+        .from('users')
+        .select('*', { count: 'exact', head: true });
+      
+      if (userError) {
+        diagnosticInfo.database.counts.users.error = userError.message;
+      } else {
+        diagnosticInfo.database.counts.users.count = userCount;
+      }
+    } catch (error) {
+      diagnosticInfo.database.counts.users.error = String(error);
+    }
+    
+    try {
+      const { count: channelCount, error: channelError } = await supabase
+        .from('channels')
+        .select('*', { count: 'exact', head: true });
+      
+      if (channelError) {
+        diagnosticInfo.database.counts.channels.error = channelError.message;
+      } else {
+        diagnosticInfo.database.counts.channels.count = channelCount;
+      }
+    } catch (error) {
+      diagnosticInfo.database.counts.channels.error = String(error);
+    }
+    
+    try {
+      const { count: subscriptionCount, error: subscriptionError } = await supabase
+        .from('subscriptions')
+        .select('*', { count: 'exact', head: true });
+      
+      if (subscriptionError) {
+        diagnosticInfo.database.counts.subscriptions.error = subscriptionError.message;
+      } else {
+        diagnosticInfo.database.counts.subscriptions.count = subscriptionCount;
+      }
+    } catch (error) {
+      diagnosticInfo.database.counts.subscriptions.error = String(error);
+    }
+    
+    // Check for user with ID 3
+    try {
+      const { data: user3, error: user3Error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', 3)
+        .single();
+      
+      if (user3Error) {
+        diagnosticInfo.database.sampleQueries.userWithId3.error = user3Error.message;
+      } else {
+        diagnosticInfo.database.sampleQueries.userWithId3.exists = !!user3;
+      }
+    } catch (error) {
+      diagnosticInfo.database.sampleQueries.userWithId3.error = String(error);
+    }
+    
+    // Check for channels with user_id 3
+    try {
+      const { count: channelsUser3Count, error: channelsUser3Error } = await supabase
+        .from('channels')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', 3);
+      
+      if (channelsUser3Error) {
+        diagnosticInfo.database.sampleQueries.channelsForUser3.error = channelsUser3Error.message;
+      } else {
+        diagnosticInfo.database.sampleQueries.channelsForUser3.count = channelsUser3Count;
+      }
+    } catch (error) {
+      diagnosticInfo.database.sampleQueries.channelsForUser3.error = String(error);
+    }
+    
+    // Check for subscriptions with user_id 3
+    try {
+      const { count: subscriptionsUser3Count, error: subscriptionsUser3Error } = await supabase
+        .from('subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', 3);
+      
+      if (subscriptionsUser3Error) {
+        diagnosticInfo.database.sampleQueries.subscriptionsForUser3.error = subscriptionsUser3Error.message;
+      } else {
+        diagnosticInfo.database.sampleQueries.subscriptionsForUser3.count = subscriptionsUser3Count;
+      }
+    } catch (error) {
+      diagnosticInfo.database.sampleQueries.subscriptionsForUser3.error = String(error);
+    }
+    
+    // Get schema information
+    try {
+      const { data: usersColumns, error: usersColumnsError } = await supabase
+        .from('information_schema.columns')
+        .select('column_name')
+        .eq('table_name', 'users')
+        .eq('table_schema', 'public');
+      
+      if (usersColumnsError) {
+        diagnosticInfo.database.schemas.users.error = usersColumnsError.message;
+      } else {
+        diagnosticInfo.database.schemas.users.columns = usersColumns?.map(c => c.column_name) || [];
+      }
+    } catch (error) {
+      diagnosticInfo.database.schemas.users.error = String(error);
+    }
+    
+    try {
+      const { data: channelsColumns, error: channelsColumnsError } = await supabase
+        .from('information_schema.columns')
+        .select('column_name')
+        .eq('table_name', 'channels')
+        .eq('table_schema', 'public');
+      
+      if (channelsColumnsError) {
+        diagnosticInfo.database.schemas.channels.error = channelsColumnsError.message;
+      } else {
+        diagnosticInfo.database.schemas.channels.columns = channelsColumns?.map(c => c.column_name) || [];
+      }
+    } catch (error) {
+      diagnosticInfo.database.schemas.channels.error = String(error);
+    }
+    
+    try {
+      const { data: subscriptionsColumns, error: subscriptionsColumnsError } = await supabase
+        .from('information_schema.columns')
+        .select('column_name')
+        .eq('table_name', 'subscriptions')
+        .eq('table_schema', 'public');
+      
+      if (subscriptionsColumnsError) {
+        diagnosticInfo.database.schemas.subscriptions.error = subscriptionsColumnsError.message;
+      } else {
+        diagnosticInfo.database.schemas.subscriptions.columns = subscriptionsColumns?.map(c => c.column_name) || [];
+      }
+    } catch (error) {
+      diagnosticInfo.database.schemas.subscriptions.error = String(error);
+    }
+    
+    return res.status(200).json(diagnosticInfo);
+  } catch (error) {
+    console.error('Error in system diagnostics endpoint:', error);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Error running system diagnostics', 
+      error: String(error)
     });
   }
 });
