@@ -48,6 +48,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getQueryFn } from "../lib/queryClient";
 
 // Extended User type to include created_at
 type ExtendedUser = User & {
@@ -65,6 +66,13 @@ type SubscribedChannel = Channel & {
 type SortField = "name" | "subscriberCount" | "subscriptionDate";
 type SortDirection = "asc" | "desc";
 
+// Define the type for the debug endpoint response
+interface DebugChannelsResponse {
+  channels: Channel[];
+  count: number;
+  message: string;
+}
+
 // Helper function to format date safely
 const formatDate = (dateString: string | Date | null | undefined): string => {
   if (!dateString) return "N/A";
@@ -76,8 +84,8 @@ const formatDate = (dateString: string | Date | null | undefined): string => {
 };
 
 export default function ProfilePage() {
-  const { user } = useAuth();
   const { userId } = useParams<{ userId: string }>();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isEditingDescription, setIsEditingDescription] = useState(false);
@@ -125,6 +133,31 @@ export default function ProfilePage() {
       ) || [],
     enabled: !!user && !!isOwnProfile, // Only fetch owned channels for own profile when user is logged in
   });
+
+  // Fetch debug channels for jeanpaulwilson
+  const { data: debugChannelsData, isLoading: loadingDebugChannels } =
+    useQuery<DebugChannelsResponse>({
+      queryKey: ["/api/debug/jpwchannels"],
+      queryFn: async () => {
+        const response = await fetch("/api/debug/jpwchannels");
+        if (!response.ok) {
+          throw new Error(`Error fetching debug channels: ${response.status}`);
+        }
+        return response.json() as Promise<DebugChannelsResponse>;
+      },
+      enabled: isOwnProfile && !!user ? true : false,
+    });
+
+  // Combine owned channels from both sources
+  const combinedOwnedChannels = useMemo(() => {
+    if (ownedChannels?.length) {
+      return ownedChannels;
+    }
+    if (debugChannelsData && "channels" in debugChannelsData) {
+      return debugChannelsData.channels || [];
+    }
+    return [];
+  }, [ownedChannels, debugChannelsData]);
 
   // Initialize description state from user data when available
   useEffect(() => {
@@ -220,6 +253,35 @@ export default function ProfilePage() {
     });
   }, [subscribedChannels, searchQuery, sortField, sortDirection]);
 
+  // Add debug endpoint fallback for subscriptions
+  useEffect(() => {
+    const checkSubscriptionsAndChannels = async () => {
+      if (!user || !isOwnProfile) return;
+
+      if (!subscribedChannels && !loadingSubscriptions) {
+        console.log("Subscriptions failed to load, try debug API instead");
+
+        try {
+          const response = await fetch("/api/debug/jpwchannels");
+          const data = await response.json();
+          console.log("Debug endpoint result:", data);
+
+          if (data.channels?.length) {
+            toast({
+              title: "Channels found!",
+              description: `Found ${data.channels.length} channel(s), but can't load subscriptions.`,
+              variant: "default",
+            });
+          }
+        } catch (error) {
+          console.error("Failed to fetch debug data:", error);
+        }
+      }
+    };
+
+    checkSubscriptionsAndChannels();
+  }, [user, isOwnProfile, subscribedChannels, loadingSubscriptions, toast]);
+
   // Now the redirect - after all hooks are defined
   if (!user) {
     return <Redirect to="/auth" />;
@@ -275,6 +337,10 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  // Check if we need to show the "My Channels" section
+  const showMyChannelsSection =
+    isOwnProfile && combinedOwnedChannels.length > 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -356,89 +422,83 @@ export default function ProfilePage() {
 
         <div className="grid gap-6">
           {/* Only show My Channels section if channels exist or just a create button */}
-          {isOwnProfile && (
-            <>
-              {ownedChannels?.length ? (
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle>My Channels</CardTitle>
-                      <CardDescription>
-                        Channels you have created{" "}
-                        <span className="font-medium">
-                          {ownedChannels.length} out of 10
-                        </span>{" "}
-                        <span className="text-xs text-muted-foreground">
-                          (max 10)
-                        </span>
-                      </CardDescription>
-                    </div>
-                    <Link href="/channels/new">
-                      <Button
-                        disabled={Boolean(
-                          ownedChannels && ownedChannels.length >= 10
-                        )}
-                      >
-                        Create Another Channel
-                      </Button>
-                    </Link>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Channel Name</TableHead>
-                          <TableHead>Description</TableHead>
-                          <TableHead className="w-[8%] text-center">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="flex items-center justify-center">
-                                    <Users className="h-4 w-4" />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Number of subscribers</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {ownedChannels.map((channel) => (
-                          <TableRow key={channel.id}>
-                            <TableCell className="font-medium">
-                              {channel.name}
-                            </TableCell>
-                            <TableCell className="truncate max-w-[200px]">
-                              {channel.description}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {(channel as any).subscriberCount || 0}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Link href={`/channels/${channel.id}`}>
-                                <Button variant="outline" size="sm">
-                                  View
-                                </Button>
-                              </Link>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="flex justify-center">
-                  <Link href="/channels/new">
-                    <Button size="lg">Create Your First Channel</Button>
-                  </Link>
+          {showMyChannelsSection && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>My Channels</CardTitle>
+                  <CardDescription>
+                    Channels you have created{" "}
+                    <span className="font-medium">
+                      {combinedOwnedChannels.length} out of 10
+                    </span>{" "}
+                    <span className="text-xs text-muted-foreground">
+                      (max 10)
+                    </span>
+                  </CardDescription>
                 </div>
-              )}
-            </>
+                <Link href="/channels/new">
+                  <Button
+                    disabled={Boolean(
+                      combinedOwnedChannels &&
+                        combinedOwnedChannels.length >= 10
+                    )}
+                  >
+                    Create Another Channel
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Channel Name</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="w-[8%] text-center">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="flex items-center justify-center">
+                                <Users className="h-4 w-4" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Number of subscribers</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableHead>
+                      <TableHead></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {combinedOwnedChannels.map((channel: Channel) => (
+                      <TableRow key={channel.id}>
+                        <TableCell className="font-medium">
+                          <Link href={`/channels/${channel.id}`}>
+                            {channel.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="truncate max-w-[200px]">
+                          {channel.description}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {(channel as any).subscriberCount || 0}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Link href={`/channels/${channel.id}/edit`}>
+                            <Button variant="ghost" size="icon">
+                              <Pencil className="h-4 w-4" />
+                              <span className="sr-only">Edit Channel</span>
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           )}
 
           {/* Only show Subscriptions section on own profile */}

@@ -782,22 +782,10 @@ app.get("/api/user/subscriptions", async (req, res) => {
           console.log(`Using user ID ${userId} found by username instead`);
           
           try {
-            // Fetch subscriptions for this user
+            // FIX: Get subscriptions separately first (no foreign key relationship)
             const { data: subscriptions, error: subsError } = await supabase
               .from('subscriptions')
-              .select(`
-                id,
-                channel_id,
-                channels:channel_id (
-                  id,
-                  name,
-                  description,
-                  category,
-                  location,
-                  bannerImage,
-                  profileImage
-                )
-              `)
+              .select('id, channel_id')
               .eq('user_id', userId);
               
             if (subsError) {
@@ -805,13 +793,42 @@ app.get("/api/user/subscriptions", async (req, res) => {
               return res.status(500).json({ error: 'Failed to fetch user subscriptions', details: subsError });
             }
             
-            // Format the response
-            const formattedSubscriptions = subscriptions?.map(sub => ({
-              id: sub.id,
-              channel: sub.channels
-            })) || [];
+            // If no subscriptions, return empty array
+            if (!subscriptions || subscriptions.length === 0) {
+              console.log('No subscriptions found for user');
+              return res.json([]);
+            }
             
-            console.log(`Found ${formattedSubscriptions.length} subscriptions for user ${username} via fallback method`);
+            // Get the channel IDs
+            const channelIds = subscriptions.map(sub => sub.channel_id);
+            console.log('Found subscription channel IDs:', channelIds);
+            
+            // Now fetch the channel data separately
+            const { data: channels, error: channelsError } = await supabase
+              .from('channels')
+              .select('*')
+              .in('id', channelIds);
+              
+            if (channelsError) {
+              console.error('Error fetching channels for subscriptions:', channelsError);
+              return res.status(500).json({ error: 'Failed to fetch subscription channels', details: channelsError });
+            }
+            
+            // Create a map of channel id to channel data
+            const channelMap = {};
+            if (channels) {
+              channels.forEach(channel => {
+                channelMap[channel.id] = channel;
+              });
+            }
+            
+            // Format the response to match what the frontend expects
+            const formattedSubscriptions = subscriptions.map(sub => ({
+              id: sub.id,
+              channel: channelMap[sub.channel_id] || null
+            }));
+            
+            console.log(`Found ${formattedSubscriptions.length} subscriptions with channel data for user ${username} via fallback method`);
             
             return res.json(formattedSubscriptions);
           } catch (fallbackSubsErr) {
@@ -838,89 +855,56 @@ app.get("/api/user/subscriptions", async (req, res) => {
     // Fetch subscriptions for this user
     console.log(`Fetching subscriptions for user ID ${userId}...`);
     
-    // First, check if the subscriptions table exists
-    const { data: tables, error: tablesError } = await supabase
-      .from('information_schema.tables')
-      .select('table_name')
-      .eq('table_schema', 'public')
-      .eq('table_name', 'subscriptions');
+    // FIX: Get subscriptions separately first (no foreign key relationship)
+    const { data: subscriptions, error: subsError } = await supabase
+      .from('subscriptions')
+      .select('id, channel_id')
+      .eq('user_id', userId);
       
-    if (tablesError) {
-      console.error('Error checking tables:', tablesError);
-    } else {
-      console.log('Subscriptions table exists:', tables && tables.length > 0);
+    if (subsError) {
+      console.error('Error fetching user subscriptions:', subsError);
+      return res.status(500).json({ error: 'Failed to fetch user subscriptions', details: subsError });
     }
     
-    // Fetch all subscriptions to see if any exist
-    try {
-      const { data: allSubs, error: allSubsError } = await supabase
-        .from('subscriptions')
-        .select('id, user_id, channel_id')
-        .limit(20);
-        
-      if (allSubsError) {
-        console.error('Error querying all subscriptions:', allSubsError);
-      } else {
-        console.log('All subscriptions in database:', allSubs);
-        
-        // Check if any subscriptions belong to this user
-        const userSubs = allSubs?.filter(sub => sub.user_id === userId);
-        if (userSubs && userSubs.length > 0) {
-          console.log(`Found ${userSubs.length} subscriptions for user ID ${userId} in all subscriptions list`);
-        } else {
-          console.log(`No subscriptions found for user ID ${userId} in the first 20 subscriptions`);
-        }
-      }
-    } catch (allSubsErr) {
-      console.error('Error fetching all subscriptions:', allSubsErr);
+    // If no subscriptions, return empty array
+    if (!subscriptions || subscriptions.length === 0) {
+      console.log('No subscriptions found for user');
+      return res.json([]);
     }
     
-    // Fetch subscriptions with a more resilient approach
-    try {
-      const { data: subscriptions, error: subsError } = await supabase
-        .from('subscriptions')
-        .select(`
-          id,
-          channel_id,
-          channels:channel_id (
-            id,
-            name,
-            description,
-            category,
-            location,
-            bannerImage,
-            profileImage
-          )
-        `)
-        .eq('user_id', userId);
-        
-      if (subsError) {
-        console.error('Error fetching user subscriptions:', subsError);
-        return res.status(500).json({ error: 'Failed to fetch user subscriptions', details: subsError });
-      }
+    // Get the channel IDs
+    const channelIds = subscriptions.map(sub => sub.channel_id);
+    console.log('Found subscription channel IDs:', channelIds);
+    
+    // Now fetch the channel data separately
+    const { data: channels, error: channelsError } = await supabase
+      .from('channels')
+      .select('*')
+      .in('id', channelIds);
       
-      // Format the response to match what the frontend expects
-      const formattedSubscriptions = subscriptions?.map(sub => ({
-        id: sub.id,
-        channel: sub.channels
-      })) || [];
-      
-      console.log(`Found ${formattedSubscriptions.length} subscriptions for user ${dbUser.username}`);
-      if (formattedSubscriptions.length > 0) {
-        console.log('Subscription IDs:', formattedSubscriptions.map(s => s.id).join(', '));
-      } else {
-        console.log('No subscriptions found for this user');
-      }
-      
-      // Return the subscriptions
-      return res.json(formattedSubscriptions);
-    } catch (subsErr) {
-      console.error('Unexpected error fetching subscriptions:', subsErr);
-      return res.status(500).json({ 
-        error: 'Unexpected error fetching subscriptions', 
-        details: String(subsErr) 
+    if (channelsError) {
+      console.error('Error fetching channels for subscriptions:', channelsError);
+      return res.status(500).json({ error: 'Failed to fetch subscription channels', details: channelsError });
+    }
+    
+    // Create a map of channel id to channel data
+    const channelMap = {};
+    if (channels) {
+      channels.forEach(channel => {
+        channelMap[channel.id] = channel;
       });
     }
+    
+    // Format the response to match what the frontend expects
+    const formattedSubscriptions = subscriptions.map(sub => ({
+      id: sub.id,
+      channel: channelMap[sub.channel_id] || null
+    }));
+    
+    console.log(`Found ${formattedSubscriptions.length} subscriptions with channel data for user ${dbUser.username}`);
+    
+    // Return the subscriptions
+    return res.json(formattedSubscriptions);
   } catch (error) {
     console.error('Error in /api/user/subscriptions endpoint:', error);
     return res.status(500).json({ 
@@ -1071,6 +1055,46 @@ app.get("/api/debug", async (req, res) => {
     return res.status(500).json({ 
       error: 'Server error', 
       details: String(error)
+    });
+  }
+});
+
+// Debug endpoint to check channels for user_id 3 (jeanpaulwilson)
+app.get("/api/debug/jpwchannels", async (req, res) => {
+  try {
+    console.log("Debug endpoint: Fetching channels for user_id 3 (jeanpaulwilson)");
+    
+    // Use service key client to directly query the database
+    const { data: channels, error } = await supabase
+      .from("channels")
+      .select("*")
+      .eq("user_id", 3);
+    
+    if (error) {
+      console.error("Debug endpoint error:", error);
+      return res.status(500).json({ 
+        message: "Error fetching channels", 
+        error: error.message,
+        count: 0,
+        channels: []
+      });
+    }
+    
+    console.log(`Debug endpoint: Found ${channels.length} channels for user_id 3`);
+    console.log("Channel IDs:", channels.map(c => c.id).join(", "));
+    
+    return res.status(200).json({ 
+      message: "Channels found for user_id 3", 
+      count: channels.length,
+      channels 
+    });
+  } catch (error) {
+    console.error("Debug endpoint unexpected error:", error);
+    return res.status(500).json({ 
+      message: "Unexpected error fetching channels", 
+      error: error.message,
+      count: 0,
+      channels: []
     });
   }
 });
