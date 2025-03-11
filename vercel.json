@@ -6,11 +6,11 @@
         },
         {
             "source": "/auth-callback",
-            "destination": "/dist/public/auth-callback.html"
+            "destination": "/public/auth-callback.html"
         },
         {
             "source": "/(.*)",
-            "destination": "/dist/public/index.html"
+            "destination": "/public/index.html"
         }
     ]
 }
