@@ -1,16 +1,34 @@
 {
-    "rewrites": [
+    "version": 2,
+    "builds": [
         {
-            "source": "/api/(.*)",
-            "destination": "/api/index.ts"
+            "src": "api/index.ts",
+            "use": "@vercel/node"
         },
         {
-            "source": "/auth-callback",
-            "destination": "/public/auth-callback.html"
+            "src": "package.json",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "dist/public"
+            }
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "/api/index.ts"
         },
         {
-            "source": "/(.*)",
-            "destination": "/public/index.html"
+            "src": "/auth-callback",
+            "dest": "/authCallback.html"
+        },
+        {
+            "src": "/assets/(.*)",
+            "dest": "/assets/$1"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/index.html"
         }
     ]
 }
