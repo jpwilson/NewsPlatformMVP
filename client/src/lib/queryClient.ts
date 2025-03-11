@@ -33,8 +33,13 @@ export async function apiRequest(
   // Add auth token if available
   if (session?.access_token) {
     headers["Authorization"] = `Bearer ${session.access_token}`;
+    console.log(`API Request ${method} ${url} - Auth token present (${session.access_token.substring(0, 10)}...)`);
+  } else {
+    console.warn(`API Request ${method} ${url} - No auth token available`);
   }
 
+  console.log(`Sending ${method} request to ${url}`);
+  
   const res = await fetch(url, {
     method,
     headers,
@@ -42,6 +47,8 @@ export async function apiRequest(
     credentials: "include",
   });
 
+  console.log(`Response from ${url}: ${res.status} ${res.statusText}`);
+  
   await throwIfResNotOk(res);
   return res;
 }
@@ -59,16 +66,25 @@ export const getQueryFn: <T>(options: {
     const headers: Record<string, string> = {};
     
     // Add auth token if available
+    const url = queryKey[0] as string;
     if (session?.access_token) {
       headers["Authorization"] = `Bearer ${session.access_token}`;
+      console.log(`Query ${url} - Auth token present (${session.access_token.substring(0, 10)}...)`);
+    } else {
+      console.warn(`Query ${url} - No auth token available`);
     }
 
-    const res = await fetch(queryKey[0] as string, {
+    console.log(`Fetching data from ${url}`);
+    
+    const res = await fetch(url, {
       credentials: "include",
       headers
     });
 
+    console.log(`Response from ${url}: ${res.status} ${res.statusText}`);
+    
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+      console.warn(`Unauthorized access to ${url}, returning null as configured`);
       return null;
     }
 

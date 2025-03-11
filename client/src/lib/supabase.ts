@@ -62,4 +62,71 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // Add event listener for auth state changes (debugging)
 supabase.auth.onAuthStateChange((event, session) => {
   console.log('Supabase auth state changed:', event, session ? '✓ Session exists' : '✗ No session');
-}); 
+  if (session) {
+    console.log('User ID:', session.user.id);
+    console.log('Access token exists:', !!session.access_token);
+  }
+});
+
+// Utility function to get current session with error handling
+export async function getCurrentSession() {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error('Error getting session:', error);
+      return null;
+    }
+    return data.session;
+  } catch (error) {
+    console.error('Unexpected error getting session:', error);
+    return null;
+  }
+}
+
+// Utility function to check if user is authenticated
+export async function isAuthenticated() {
+  const session = await getCurrentSession();
+  return !!session;
+}
+
+// Debug function to help troubleshoot authentication issues
+export async function debugAuthState() {
+  console.group('Debug Auth State');
+  try {
+    // Check session
+    const { data: sessionData } = await supabase.auth.getSession();
+    console.log('Session exists:', !!sessionData.session);
+    
+    if (sessionData.session) {
+      console.log('User ID:', sessionData.session.user.id);
+      console.log('Token expiry:', new Date(sessionData.session.expires_at! * 1000).toISOString());
+      console.log('Is expired:', Date.now() > sessionData.session.expires_at! * 1000);
+    }
+    
+    // Check localStorage
+    if (typeof window !== 'undefined') {
+      const keys = Object.keys(localStorage).filter(key => key.includes('supabase'));
+      console.log('Supabase localStorage keys:', keys);
+      
+      keys.forEach(key => {
+        try {
+          const value = localStorage.getItem(key);
+          console.log(`${key}: ${value ? '✓ Has value' : '✗ Empty'}`);
+        } catch (e) {
+          console.error(`Error reading ${key}:`, e);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error in debugAuthState:', error);
+  }
+  console.groupEnd();
+}
+
+// Call debug function on load
+if (typeof window !== 'undefined') {
+  // Wait for DOM to be ready
+  window.addEventListener('DOMContentLoaded', () => {
+    setTimeout(debugAuthState, 1000); // Delay to let auth initialize
+  });
+} 

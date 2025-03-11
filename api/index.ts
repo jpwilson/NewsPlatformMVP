@@ -407,6 +407,161 @@ app.post('/api/auth/session-from-hash', async (req, res) => {
   }
 });
 
+// Add logout endpoint
+app.post("/api/logout", async (req, res) => {
+  try {
+    console.log("Logout requested");
+    
+    // Extract the Authorization header to identify the session
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Error during logout:', error);
+        return res.status(500).json({ error: 'Failed to logout' });
+      }
+    }
+    
+    // Return success even if no token was provided
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error in logout endpoint:', error);
+    return res.status(500).json({ error: 'Server error during logout' });
+  }
+});
+
+// Add user channels endpoint
+app.get("/api/user/channels", async (req, res) => {
+  try {
+    // Extract the Authorization header (if any)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.sendStatus(401);
+    }
+    
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.sendStatus(401);
+    }
+    
+    // Verify the token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('Error verifying user token:', error);
+      return res.sendStatus(401);
+    }
+    
+    // Look up the user in our database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('supabase_uid', user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user in database:', dbError);
+      return res.sendStatus(401);
+    }
+    
+    // Fetch channels owned by this user
+    const { data: channels, error: channelsError } = await supabase
+      .from('channels')
+      .select('*')
+      .eq('user_id', dbUser.id);
+      
+    if (channelsError) {
+      console.error('Error fetching user channels:', channelsError);
+      return res.status(500).json({ error: 'Failed to fetch user channels' });
+    }
+    
+    console.log(`Found ${channels?.length || 0} channels for user ${dbUser.username}`);
+    
+    // Return the channels
+    return res.json(channels || []);
+  } catch (error) {
+    console.error('Error in /api/user/channels endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Add user subscriptions endpoint
+app.get("/api/user/subscriptions", async (req, res) => {
+  try {
+    // Extract the Authorization header (if any)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.sendStatus(401);
+    }
+    
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.sendStatus(401);
+    }
+    
+    // Verify the token with Supabase
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      console.error('Error verifying user token:', error);
+      return res.sendStatus(401);
+    }
+    
+    // Look up the user in our database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('supabase_uid', user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user in database:', dbError);
+      return res.sendStatus(401);
+    }
+    
+    // Fetch subscriptions for this user
+    const { data: subscriptions, error: subsError } = await supabase
+      .from('subscriptions')
+      .select(`
+        id,
+        channel_id,
+        channels:channel_id (
+          id,
+          name,
+          description,
+          category,
+          location,
+          bannerImage,
+          profileImage
+        )
+      `)
+      .eq('user_id', dbUser.id);
+      
+    if (subsError) {
+      console.error('Error fetching user subscriptions:', subsError);
+      return res.status(500).json({ error: 'Failed to fetch user subscriptions' });
+    }
+    
+    // Format the response to match what the frontend expects
+    const formattedSubscriptions = subscriptions?.map(sub => ({
+      id: sub.id,
+      channel: sub.channels
+    })) || [];
+    
+    console.log(`Found ${formattedSubscriptions.length} subscriptions for user ${dbUser.username}`);
+    
+    // Return the subscriptions
+    return res.json(formattedSubscriptions);
+  } catch (error) {
+    console.error('Error in /api/user/subscriptions endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const status = err.status || err.statusCode || 500;
