@@ -94,16 +94,22 @@ app.get("/api/health", (req, res) => {
 // User route
 app.get("/api/user", async (req, res) => {
   try {
+    console.log("User endpoint called");
+    
     // Extract the Authorization header (if any)
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found");
       return res.sendStatus(401);
     }
     
     const token = authHeader.split(' ')[1];
     if (!token) {
+      console.log("No token found in Authorization header");
       return res.sendStatus(401);
     }
+    
+    console.log("Verifying user token...");
     
     // Verify the token with Supabase
     const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
@@ -113,17 +119,67 @@ app.get("/api/user", async (req, res) => {
       return res.sendStatus(401);
     }
     
+    const supabaseUid = user.id;
+    console.log("User verified, Supabase UID:", supabaseUid);
+    console.log("User email:", user.email);
+    console.log("User metadata:", user.user_metadata);
+    
     // Look up the user in our database
+    console.log("Looking up user in database with Supabase UID:", supabaseUid);
     const { data: dbUser, error: dbError } = await supabase
       .from('users')
       .select('*')
-      .eq('supabase_uid', user.id)
+      .eq('supabase_uid', supabaseUid)
       .single();
     
-    if (dbError || !dbUser) {
+    if (dbError) {
       console.error('Error finding user in database:', dbError);
+      if (dbError.code === 'PGRST116') {
+        console.log("No user found in the database with supabase_uid:", supabaseUid);
+      }
+      
+      // FALLBACK: Try to get user by username if supabase_uid fails
+      const username = user.email?.split('@')[0] || user.user_metadata?.name || user.user_metadata?.full_name;
+      if (username) {
+        console.log('Trying fallback: looking up user by username:', username);
+        const { data: userByUsername, error: usernameError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', username)
+          .single();
+          
+        if (usernameError) {
+          console.error('Fallback search also failed:', usernameError);
+        } else if (userByUsername) {
+          console.log('Found user by username instead:', userByUsername);
+          
+          // Update this user's supabase_uid if it's missing
+          if (!userByUsername.supabase_uid) {
+            console.log('Updating user record with correct Supabase UID');
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ supabase_uid: supabaseUid })
+              .eq('id', userByUsername.id);
+              
+            if (updateError) {
+              console.error('Failed to update user with Supabase UID:', updateError);
+            }
+          }
+          
+          // Return this user
+          return res.json(userByUsername);
+        }
+      }
+      
       return res.sendStatus(401);
     }
+    
+    if (!dbUser) {
+      console.log("User record exists but data is null");
+      return res.sendStatus(401);
+    }
+    
+    console.log("User found in database, ID:", dbUser.id);
     
     // Return the user
     return res.json(dbUser);
@@ -475,21 +531,98 @@ app.get("/api/user/channels", async (req, res) => {
       return res.sendStatus(401);
     }
     
-    console.log("User verified, ID:", userData.user.id);
+    const supabaseUid = userData.user.id;
+    console.log("User verified, Supabase UID:", supabaseUid);
+    
+    // IMPORTANT DEBUG: Directly query the users table to understand the data structure
+    try {
+      const { data: allUsers, error: allUsersError } = await supabase
+        .from('users')
+        .select('id, username, supabase_uid')
+        .limit(10);
+        
+      if (allUsersError) {
+        console.error('Error querying users table:', allUsersError);
+      } else {
+        console.log('First 10 users in database:', allUsers);
+        
+        // Find this user in the returned users
+        const currentUserInList = allUsers?.find(u => u.supabase_uid === supabaseUid);
+        if (currentUserInList) {
+          console.log('Found current user in users table:', currentUserInList);
+        } else {
+          console.log('Current user NOT found in users table. Looking for Supabase UID:', supabaseUid);
+        }
+      }
+    } catch (userQueryError) {
+      console.error('Exception querying users table:', userQueryError);
+    }
     
     // Look up the user in our database
-    console.log("Looking up user in database...");
+    console.log("Looking up user in database with Supabase UID:", supabaseUid);
     const { data: dbUser, error: dbError } = await supabase
       .from('users')
       .select('*')
-      .eq('supabase_uid', userData.user.id)
+      .eq('supabase_uid', supabaseUid)
       .single();
     
     if (dbError) {
       console.error('Error finding user in database:', dbError);
       if (dbError.code === 'PGRST116') {
-        console.log("No user found in the database with supabase_uid:", userData.user.id);
+        console.log("No user found in the database with supabase_uid:", supabaseUid);
       }
+      
+      // FALLBACK: Try to get user by username if supabase_uid fails
+      const username = userData.user.email?.split('@')[0] || userData.user.user_metadata?.name || userData.user.user_metadata?.full_name;
+      if (username) {
+        console.log('Trying fallback: looking up user by username:', username);
+        const { data: userByUsername, error: usernameError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', username)
+          .single();
+          
+        if (usernameError) {
+          console.error('Fallback search also failed:', usernameError);
+          return res.status(401).json({ error: 'User not found in database', details: dbError });
+        }
+        
+        if (userByUsername) {
+          console.log('Found user by username instead:', userByUsername);
+          
+          // Update this user's supabase_uid if it's missing
+          if (!userByUsername.supabase_uid) {
+            console.log('Updating user record with correct Supabase UID');
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ supabase_uid: supabaseUid })
+              .eq('id', userByUsername.id);
+              
+            if (updateError) {
+              console.error('Failed to update user with Supabase UID:', updateError);
+            }
+          }
+          
+          // Continue with this user
+          const userId = userByUsername.id;
+          console.log(`Using user ID ${userId} found by username instead`);
+          
+          // Fetch channels for this user ID
+          const { data: channels, error: channelsError } = await supabase
+            .from('channels')
+            .select('*')
+            .eq('user_id', userId);
+            
+          if (channelsError) {
+            console.error('Error fetching user channels by username fallback:', channelsError);
+            return res.status(500).json({ error: 'Failed to fetch user channels', details: channelsError });
+          }
+          
+          console.log(`Found ${channels?.length || 0} channels for user ${username} via fallback method`);
+          return res.json(channels || []);
+        }
+      }
+      
       return res.status(401).json({ error: 'User not found in database', details: dbError });
     }
     
@@ -498,10 +631,11 @@ app.get("/api/user/channels", async (req, res) => {
       return res.status(401).json({ error: 'User not found in database' });
     }
     
-    console.log("User found in database, ID:", dbUser.id);
+    const userId = dbUser.id;
+    console.log("User found in database, ID:", userId);
     
     // Fetch channels owned by this user
-    console.log(`Fetching channels for user ID ${dbUser.id}...`);
+    console.log(`Fetching channels for user ID ${userId}...`);
     
     // First, check if we can query the channels table
     try {
@@ -519,10 +653,23 @@ app.get("/api/user/channels", async (req, res) => {
     }
     
     try {
+      // IMPORTANT: Print all channels in the database to see if data exists
+      const { data: allChannels, error: allChannelsError } = await supabase
+        .from('channels')
+        .select('id, name, user_id')
+        .limit(20);
+        
+      if (allChannelsError) {
+        console.error('Error querying all channels:', allChannelsError);
+      } else {
+        console.log('All channels in database:', allChannels);
+      }
+      
+      // Normal query for this user's channels
       const { data: channels, error: channelsError } = await supabase
         .from('channels')
         .select('*')
-        .eq('user_id', dbUser.id);
+        .eq('user_id', userId);
         
       if (channelsError) {
         console.error('Error fetching user channels:', channelsError);
@@ -530,7 +677,11 @@ app.get("/api/user/channels", async (req, res) => {
       }
       
       console.log(`Found ${channels?.length || 0} channels for user ${dbUser.username}`);
-      console.log('Channel IDs:', channels?.map(c => c.id).join(', ') || 'none');
+      if (channels && channels.length > 0) {
+        console.log('Channel IDs:', channels.map(c => c.id).join(', '));
+      } else {
+        console.log('No channels found for this user');
+      }
       
       // Return the channels
       return res.json(channels || []);
@@ -578,21 +729,101 @@ app.get("/api/user/subscriptions", async (req, res) => {
       return res.sendStatus(401);
     }
     
-    console.log("User verified, ID:", userData.user.id);
+    const supabaseUid = userData.user.id;
+    console.log("User verified, Supabase UID:", supabaseUid);
     
     // Look up the user in our database
-    console.log("Looking up user in database...");
+    console.log("Looking up user in database with Supabase UID:", supabaseUid);
     const { data: dbUser, error: dbError } = await supabase
       .from('users')
       .select('*')
-      .eq('supabase_uid', userData.user.id)
+      .eq('supabase_uid', supabaseUid)
       .single();
     
     if (dbError) {
       console.error('Error finding user in database:', dbError);
       if (dbError.code === 'PGRST116') {
-        console.log("No user found in the database with supabase_uid:", userData.user.id);
+        console.log("No user found in the database with supabase_uid:", supabaseUid);
       }
+      
+      // FALLBACK: Try to get user by username if supabase_uid fails
+      const username = userData.user.email?.split('@')[0] || userData.user.user_metadata?.name || userData.user.user_metadata?.full_name;
+      if (username) {
+        console.log('Trying fallback: looking up user by username:', username);
+        const { data: userByUsername, error: usernameError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', username)
+          .single();
+          
+        if (usernameError) {
+          console.error('Fallback search also failed:', usernameError);
+          return res.status(401).json({ error: 'User not found in database', details: dbError });
+        }
+        
+        if (userByUsername) {
+          console.log('Found user by username instead:', userByUsername);
+          
+          // Update this user's supabase_uid if it's missing
+          if (!userByUsername.supabase_uid) {
+            console.log('Updating user record with correct Supabase UID');
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ supabase_uid: supabaseUid })
+              .eq('id', userByUsername.id);
+              
+            if (updateError) {
+              console.error('Failed to update user with Supabase UID:', updateError);
+            }
+          }
+          
+          // Continue with this user for subscriptions
+          const userId = userByUsername.id;
+          console.log(`Using user ID ${userId} found by username instead`);
+          
+          try {
+            // Fetch subscriptions for this user
+            const { data: subscriptions, error: subsError } = await supabase
+              .from('subscriptions')
+              .select(`
+                id,
+                channel_id,
+                channels:channel_id (
+                  id,
+                  name,
+                  description,
+                  category,
+                  location,
+                  bannerImage,
+                  profileImage
+                )
+              `)
+              .eq('user_id', userId);
+              
+            if (subsError) {
+              console.error('Error fetching user subscriptions via fallback:', subsError);
+              return res.status(500).json({ error: 'Failed to fetch user subscriptions', details: subsError });
+            }
+            
+            // Format the response
+            const formattedSubscriptions = subscriptions?.map(sub => ({
+              id: sub.id,
+              channel: sub.channels
+            })) || [];
+            
+            console.log(`Found ${formattedSubscriptions.length} subscriptions for user ${username} via fallback method`);
+            
+            return res.json(formattedSubscriptions);
+          } catch (fallbackSubsErr) {
+            console.error('Unexpected error in fallback subscriptions fetch:', fallbackSubsErr);
+            return res.status(500).json({ 
+              error: 'Unexpected error fetching subscriptions', 
+              details: String(fallbackSubsErr) 
+            });
+          }
+        }
+      }
+      
       return res.status(401).json({ error: 'User not found in database', details: dbError });
     }
     
@@ -601,10 +832,11 @@ app.get("/api/user/subscriptions", async (req, res) => {
       return res.status(401).json({ error: 'User not found in database' });
     }
     
-    console.log("User found in database, ID:", dbUser.id);
+    const userId = dbUser.id;
+    console.log("User found in database, ID:", userId);
     
     // Fetch subscriptions for this user
-    console.log(`Fetching subscriptions for user ID ${dbUser.id}...`);
+    console.log(`Fetching subscriptions for user ID ${userId}...`);
     
     // First, check if the subscriptions table exists
     const { data: tables, error: tablesError } = await supabase
@@ -617,6 +849,30 @@ app.get("/api/user/subscriptions", async (req, res) => {
       console.error('Error checking tables:', tablesError);
     } else {
       console.log('Subscriptions table exists:', tables && tables.length > 0);
+    }
+    
+    // Fetch all subscriptions to see if any exist
+    try {
+      const { data: allSubs, error: allSubsError } = await supabase
+        .from('subscriptions')
+        .select('id, user_id, channel_id')
+        .limit(20);
+        
+      if (allSubsError) {
+        console.error('Error querying all subscriptions:', allSubsError);
+      } else {
+        console.log('All subscriptions in database:', allSubs);
+        
+        // Check if any subscriptions belong to this user
+        const userSubs = allSubs?.filter(sub => sub.user_id === userId);
+        if (userSubs && userSubs.length > 0) {
+          console.log(`Found ${userSubs.length} subscriptions for user ID ${userId} in all subscriptions list`);
+        } else {
+          console.log(`No subscriptions found for user ID ${userId} in the first 20 subscriptions`);
+        }
+      }
+    } catch (allSubsErr) {
+      console.error('Error fetching all subscriptions:', allSubsErr);
     }
     
     // Fetch subscriptions with a more resilient approach
@@ -636,7 +892,7 @@ app.get("/api/user/subscriptions", async (req, res) => {
             profileImage
           )
         `)
-        .eq('user_id', dbUser.id);
+        .eq('user_id', userId);
         
       if (subsError) {
         console.error('Error fetching user subscriptions:', subsError);
@@ -650,6 +906,11 @@ app.get("/api/user/subscriptions", async (req, res) => {
       })) || [];
       
       console.log(`Found ${formattedSubscriptions.length} subscriptions for user ${dbUser.username}`);
+      if (formattedSubscriptions.length > 0) {
+        console.log('Subscription IDs:', formattedSubscriptions.map(s => s.id).join(', '));
+      } else {
+        console.log('No subscriptions found for this user');
+      }
       
       // Return the subscriptions
       return res.json(formattedSubscriptions);
