@@ -34,52 +34,322 @@ console.log("Has SUPABASE_SERVICE_KEY:", !!process.env.SUPABASE_SERVICE_KEY);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Add CORS handling
+// Add CORS middleware with dynamic origin
 app.use((req, res, next) => {
-  // Set appropriate CORS headers for production
-  const origin = req.headers.origin;
-  res.header('Access-Control-Allow-Origin', origin || '*');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  const origin = req.headers.origin || "";
+  // Allow specific origins or all in development
+  const allowedOrigins = [
+    'https://newsplatformmvp.vercel.app',
+    'https://newsplatformmvp-git-main-jpwilsons-projects.vercel.app'
+  ];
+  
+  if (process.env.NODE_ENV === 'development' || allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
+  
   next();
 });
 
-// Add logging middleware
+// Verbose request logging middleware for debugging
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
+  const requestId = Math.random().toString(36).substring(2, 15);
+  
+  // Log request details
+  console.log(`[${requestId}] 🔍 REQUEST ${req.method} ${req.url}`);
+  console.log(`[${requestId}] Headers: ${JSON.stringify(req.headers)}`);
+  
+  if (Object.keys(req.query).length > 0) {
+    console.log(`[${requestId}] Query params: ${JSON.stringify(req.query)}`);
+  }
+  
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log(`[${requestId}] Body: ${JSON.stringify(req.body)}`);
+  }
+  
+  // Capture response data
+  const originalSend = res.send;
+  res.send = function(body) {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+    
+    // Log response status
+    const status = res.statusCode;
+    const statusIcon = status >= 200 && status < 300 ? '✅' : status >= 400 ? '❌' : '⚠️';
+    
+    console.log(`[${requestId}] ${statusIcon} RESPONSE ${status} - ${duration}ms`);
+    
+    // For error responses, log more details
+    if (status >= 400) {
+      try {
+        const responseBody = typeof body === 'string' ? JSON.parse(body) : body;
+        console.log(`[${requestId}] Error response: ${JSON.stringify(responseBody)}`);
+      } catch (e) {
+        console.log(`[${requestId}] Error response: ${body}`);
       }
-
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
-
-      console.log(logLine);
     }
-  });
-
+    
+    return originalSend.call(this, body);
+  };
+  
   next();
 });
 
 // ===== DIRECT ROUTE IMPLEMENTATIONS =====
+
+// Simple test endpoint to verify serverless functionality
+app.get("/api/debug/test", (req, res) => {
+  console.log("Debug test endpoint called");
+  const requestInfo = {
+    method: req.method,
+    url: req.url,
+    headers: req.headers,
+    timestamp: new Date().toISOString(),
+    env: {
+      node: process.env.NODE_ENV,
+      vercel: process.env.VERCEL === '1' ? 'true' : 'false',
+      vercelEnv: process.env.VERCEL_ENV,
+      region: process.env.VERCEL_REGION
+    },
+    query: req.query
+  };
+  
+  return res.json({ 
+    message: "Serverless function is working correctly",
+    requestInfo,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Comprehensive connectivity test endpoint
+app.get("/api/debug/connectivity", async (req, res) => {
+  console.log("Debug connectivity endpoint called");
+  
+  interface ConnectivityResults {
+    serverless: {
+      status: string;
+      timestamp: string;
+    };
+    supabase: {
+      status: string;
+      error: string | null;
+      tables: string[];
+    };
+    env: {
+      node: string | undefined;
+      vercel: string;
+      vercelEnv: string | undefined;
+      region: string | undefined;
+      supabaseUrl: string;
+      supabaseAnonKey: string;
+      supabaseServiceKey: string;
+    };
+  }
+  
+  const results: ConnectivityResults = {
+    serverless: {
+      status: "ok",
+      timestamp: new Date().toISOString()
+    },
+    supabase: {
+      status: "unknown",
+      error: null,
+      tables: [],
+    },
+    env: {
+      node: process.env.NODE_ENV,
+      vercel: process.env.VERCEL === '1' ? 'true' : 'false',
+      vercelEnv: process.env.VERCEL_ENV,
+      region: process.env.VERCEL_REGION,
+      supabaseUrl: process.env.SUPABASE_URL ? "defined" : "undefined",
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY ? "defined" : "undefined",
+      supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ? "defined" : "undefined"
+    }
+  };
+
+  try {
+    // Test Supabase connection with a simple query
+    const { data: tableData, error: tableError } = await supabaseAuth
+      .from('users')
+      .select('count')
+      .limit(1);
+    
+    if (tableError) {
+      results.supabase.status = "error";
+      results.supabase.error = `Error querying users table: ${tableError.message}`;
+    } else {
+      results.supabase.status = "connected";
+      
+      // Try to fetch a list of tables to verify access
+      try {
+        const { data: tablesData, error: tablesError } = await supabaseAuth.rpc('get_tables');
+        
+        if (tablesError) {
+          results.supabase.tables = ["Error fetching tables"];
+        } else if (tablesData) {
+          results.supabase.tables = Array.isArray(tablesData) ? tablesData : ["Data returned but not an array"];
+        }
+      } catch (tableListError: any) {
+        console.error("Error fetching table list:", tableListError);
+        results.supabase.tables = ["Error fetching tables list"];
+      }
+
+      // Attempt a more direct query to list tables
+      try {
+        const { data: schemaData, error: schemaError } = await supabaseAuth
+          .from('pg_tables')
+          .select('tablename')
+          .eq('schemaname', 'public')
+          .limit(10);
+        
+        if (!schemaError && schemaData) {
+          results.supabase.tables = schemaData.map((t: any) => t.tablename as string);
+        }
+      } catch (directTableError) {
+        // Silently handle this error as it's just a fallback
+      }
+    }
+  } catch (e: any) {
+    results.supabase.status = "error";
+    results.supabase.error = `Exception testing Supabase: ${e.message}`;
+    console.error("Supabase connectivity test failed:", e);
+  }
+
+  return res.json(results);
+});
+
+// Channel diagnostic test endpoint
+app.get("/api/debug/channels-test", async (req, res) => {
+  console.log("Channel diagnostic test endpoint called");
+  
+  interface ChannelDiagnosticResults {
+    timestamp: string;
+    channelsEndpoint: {
+      status: string;
+      error: string | null;
+      data: string | null;
+    };
+    specificChannel: {
+      status: string;
+      error: string | null;
+      data: any | null;
+    };
+    subscriberCounts: Array<{
+      channelId: string;
+      name: string;
+      subscriberCount: string | number;
+      error: string | null;
+    }>;
+  }
+  
+  const results: ChannelDiagnosticResults = {
+    timestamp: new Date().toISOString(),
+    channelsEndpoint: {
+      status: "pending",
+      error: null,
+      data: null,
+    },
+    specificChannel: {
+      status: "pending",
+      error: null,
+      data: null,
+    },
+    subscriberCounts: []
+  };
+  
+  try {
+    // First test the /api/channels endpoint directly
+    console.log("Testing channels endpoint...");
+    try {
+      // Get all channels using the same logic as the main endpoint
+      const { data: channels, error } = await supabaseAuth
+        .from('channels')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        results.channelsEndpoint.status = "error";
+        results.channelsEndpoint.error = error.message;
+      } else if (!channels || channels.length === 0) {
+        results.channelsEndpoint.status = "empty";
+        results.channelsEndpoint.data = "No channels found";
+      } else {
+        // Successfully retrieved channels
+        results.channelsEndpoint.status = "success";
+        results.channelsEndpoint.data = `Found ${channels.length} channels`;
+        
+        // Try to enrich with subscriber counts
+        for (const channel of channels.slice(0, 3)) { // Limit to first 3 channels
+          try {
+            const { data: subs, error: subError } = await supabaseAuth
+              .from('subscriptions')
+              .select('count')
+              .eq('channel_id', channel.id);
+              
+            results.subscriberCounts.push({
+              channelId: channel.id,
+              name: channel.name,
+              subscriberCount: subError ? 'error' : (subs?.[0]?.count || 0),
+              error: subError ? subError.message : null
+            });
+          } catch (e: any) {
+            results.subscriberCounts.push({
+              channelId: channel.id,
+              name: channel.name,
+              subscriberCount: 'error',
+              error: e.message
+            });
+          }
+        }
+        
+        // Test fetching a specific channel
+        if (channels.length > 0) {
+          const testChannelId = channels[0].id;
+          try {
+            const { data: channel, error: channelError } = await supabaseAuth
+              .from('channels')
+              .select('*')
+              .eq('id', testChannelId)
+              .single();
+              
+            if (channelError) {
+              results.specificChannel.status = "error";
+              results.specificChannel.error = channelError.message;
+            } else {
+              results.specificChannel.status = "success";
+              results.specificChannel.data = {
+                id: channel.id,
+                name: channel.name,
+                found: !!channel
+              };
+            }
+          } catch (e: any) {
+            results.specificChannel.status = "exception";
+            results.specificChannel.error = e.message;
+          }
+        }
+      }
+    } catch (e: any) {
+      results.channelsEndpoint.status = "exception";
+      results.channelsEndpoint.error = e.message;
+    }
+  } catch (e: any) {
+    console.error("Error in channel diagnostic endpoint:", e);
+    return res.status(500).json({
+      error: "Internal server error in diagnostic endpoint",
+      message: e.message,
+      stack: process.env.NODE_ENV === 'development' ? e.stack : undefined
+    });
+  }
+  
+  return res.json(results);
+});
 
 // Health check route
 app.get("/api/health", (req, res) => {
@@ -828,7 +1098,7 @@ async function handleUserSubscriptions(userId: number, res: any) {
     // First get just the subscription records
     const { data: subscriptions, error: subsError } = await supabase
       .from('subscriptions')
-      .select('id, channel_id')
+      .select('id, channel_id, created_at')
       .eq('user_id', userId);
       
     if (subsError) {
@@ -889,18 +1159,26 @@ async function handleUserSubscriptions(userId: number, res: any) {
     }
     
     // Format the response to match what the frontend expects
-    const formattedSubscriptions = subscriptions.map(sub => {
-      const channel = channelMap[sub.channel_id];
-      return {
-        ...sub,
-        channel,
-        subscriptionDate: new Date().toISOString() // Use current date as fallback for now
-      };
-    });
+    const formattedSubscriptions = subscriptions
+      .map(sub => {
+        const channel = channelMap[sub.channel_id];
+        if (!channel) {
+          console.warn(`Channel ${sub.channel_id} not found for subscription ${sub.id}`);
+          return null; // Skip this subscription if channel not found
+        }
+        
+        return {
+          id: sub.id,
+          channel,
+          subscriberCount: channel.subscriberCount || 0,
+          subscriptionDate: sub.created_at || new Date().toISOString()
+        };
+      })
+      .filter(Boolean); // Remove null entries (subscriptions without channels)
     
     console.log(`Returning ${formattedSubscriptions.length} formatted subscriptions`);
     
-    // Return the subscriptions
+    // Return the subscriptions, ensuring we don't return null channels
     return res.json(formattedSubscriptions);
   } catch (error) {
     console.error('Error handling user subscriptions:', error);
@@ -1328,6 +1606,379 @@ app.get("/api/debug/system", async (req, res) => {
   }
 });
 
+// Add single channel endpoint to fix channel not found issue
+app.get("/api/channels/:id", async (req, res) => {
+  try {
+    console.log(`Fetching channel with ID: ${req.params.id}`);
+    
+    const { data: channel, error } = await supabase
+      .from("channels")
+      .select("*")
+      .eq("id", req.params.id)
+      .single();
+    
+    if (error) {
+      console.error(`Error fetching channel ID ${req.params.id}:`, error);
+      return res.status(404).json({ error: "Channel not found" });
+    }
+    
+    if (!channel) {
+      console.log(`Channel ID ${req.params.id} not found`);
+      return res.status(404).json({ error: "Channel not found" });
+    }
+    
+    // Get subscriber count using a more direct approach that works in all environments
+    try {
+      const { count: subscriberCount, error: countError } = await supabase
+        .from("subscriptions")
+        .select("*", { count: 'exact', head: true })
+        .eq("channel_id", req.params.id);
+        
+      if (countError) {
+        console.error(`Error fetching subscriber count for channel ${req.params.id}:`, countError);
+      }
+      
+      // Add subscriber count to the channel data
+      const channelWithCount = {
+        ...channel,
+        subscriberCount: subscriberCount || 0
+      };
+      
+      console.log(`Successfully fetched channel ID ${req.params.id}:`, {
+        id: channelWithCount.id,
+        name: channelWithCount.name,
+        subscriberCount: channelWithCount.subscriberCount
+      });
+      
+      return res.json(channelWithCount);
+    } catch (countError) {
+      console.error(`Error calculating subscriber count for channel ${req.params.id}:`, countError);
+      // Still return the channel even if subscriber count fails
+      return res.json({
+        ...channel,
+        subscriberCount: 0
+      });
+    }
+  } catch (error) {
+    console.error(`Error fetching channel ID ${req.params.id}:`, error);
+    return res.status(500).json({ error: "Failed to fetch channel details" });
+  }
+});
+
+// Add subscribe/unsubscribe endpoints
+app.post("/api/channels/:id/subscribe", async (req, res) => {
+  try {
+    // Extract the Authorization header (if any)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found for subscription");
+      return res.sendStatus(401);
+    }
+    
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      console.log("No token found in Authorization header for subscription");
+      return res.sendStatus(401);
+    }
+    
+    // Verify the token with Supabase
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
+    
+    if (userError || !userData.user) {
+      console.error('Error verifying user token for subscription:', userError);
+      return res.sendStatus(401);
+    }
+    
+    // Look up the user in our database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_uid', userData.user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user for subscription:', dbError);
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const userId = dbUser.id;
+    const channelId = parseInt(req.params.id);
+    
+    // Check if already subscribed
+    const { data: existingSub, error: subCheckError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('channel_id', channelId)
+      .maybeSingle();
+    
+    if (subCheckError) {
+      console.error('Error checking existing subscription:', subCheckError);
+    }
+    
+    if (existingSub) {
+      console.log(`User ${userId} already subscribed to channel ${channelId}`);
+      return res.json({ message: 'Already subscribed' });
+    }
+    
+    // Create the subscription
+    const { data, error: createError } = await supabase
+      .from('subscriptions')
+      .insert([{ user_id: userId, channel_id: channelId }])
+      .select()
+      .single();
+    
+    if (createError) {
+      console.error('Error creating subscription:', createError);
+      return res.status(500).json({ error: 'Failed to subscribe' });
+    }
+    
+    console.log(`User ${userId} subscribed to channel ${channelId}`);
+    return res.status(201).json(data);
+  } catch (error) {
+    console.error('Error in subscribe endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete("/api/channels/:id/subscribe", async (req, res) => {
+  try {
+    // Extract the Authorization header (if any)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found for unsubscribe");
+      return res.sendStatus(401);
+    }
+    
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      console.log("No token found in Authorization header for unsubscribe");
+      return res.sendStatus(401);
+    }
+    
+    // Verify the token with Supabase
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
+    
+    if (userError || !userData.user) {
+      console.error('Error verifying user token for unsubscribe:', userError);
+      return res.sendStatus(401);
+    }
+    
+    // Look up the user in our database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_uid', userData.user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user for unsubscribe:', dbError);
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const userId = dbUser.id;
+    const channelId = parseInt(req.params.id);
+    
+    // Delete the subscription
+    const { error: deleteError } = await supabase
+      .from('subscriptions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('channel_id', channelId);
+    
+    if (deleteError) {
+      console.error('Error deleting subscription:', deleteError);
+      return res.status(500).json({ error: 'Failed to unsubscribe' });
+    }
+    
+    console.log(`User ${userId} unsubscribed from channel ${channelId}`);
+    return res.json({ message: 'Unsubscribed successfully' });
+  } catch (error) {
+    console.error('Error in unsubscribe endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Add channel articles endpoint
+app.get("/api/channels/:id/articles", async (req, res) => {
+  try {
+    const channelId = parseInt(req.params.id);
+    console.log(`Fetching articles for channel ID: ${channelId}`);
+    
+    // Fetch published articles for the channel
+    const { data: articles, error } = await supabase
+      .from("articles")
+      .select("*")
+      .eq("channel_id", channelId)
+      .eq("published", true)
+      .order("created_at", { ascending: false });
+    
+    if (error) {
+      console.error(`Error fetching articles for channel ${channelId}:`, error);
+      return res.status(500).json({ error: "Failed to fetch articles" });
+    }
+    
+    console.log(`Found ${articles?.length || 0} articles for channel ${channelId}`);
+    return res.json(articles || []);
+  } catch (error) {
+    console.error(`Error fetching articles for channel:`, error);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Add channel drafts endpoint
+app.get("/api/channels/:id/drafts", async (req, res) => {
+  try {
+    // Extract the Authorization header (if any)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found for drafts");
+      return res.sendStatus(401);
+    }
+    
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      console.log("No token found in Authorization header for drafts");
+      return res.sendStatus(401);
+    }
+    
+    // Verify the token with Supabase
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
+    
+    if (userError || !userData.user) {
+      console.error('Error verifying user token for drafts:', userError);
+      return res.sendStatus(401);
+    }
+    
+    // Look up the user in our database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_uid', userData.user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user for drafts:', dbError);
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const userId = dbUser.id;
+    const channelId = parseInt(req.params.id);
+    
+    // Verify user owns this channel
+    const { data: channel, error: channelError } = await supabase
+      .from('channels')
+      .select('*')
+      .eq('id', channelId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (channelError || !channel) {
+      console.error(`User ${userId} not authorized to view drafts for channel ${channelId}`);
+      return res.status(403).json({ error: 'Not authorized to view drafts for this channel' });
+    }
+    
+    // Fetch draft articles for the channel
+    const { data: drafts, error } = await supabase
+      .from("articles")
+      .select("*")
+      .eq("channel_id", channelId)
+      .eq("published", false)
+      .order("created_at", { ascending: false });
+    
+    if (error) {
+      console.error(`Error fetching drafts for channel ${channelId}:`, error);
+      return res.status(500).json({ error: "Failed to fetch drafts" });
+    }
+    
+    console.log(`Found ${drafts?.length || 0} drafts for channel ${channelId}`);
+    return res.json(drafts || []);
+  } catch (error) {
+    console.error(`Error fetching drafts for channel:`, error);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Add support for updating a channel
+app.patch("/api/channels/:id", async (req, res) => {
+  try {
+    const channelId = parseInt(req.params.id);
+    const { name, description, category } = req.body;
+    console.log(`Updating channel ID ${channelId} with:`, req.body);
+    
+    // Extract the Authorization header (if any)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found for channel update");
+      return res.sendStatus(401);
+    }
+    
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      console.log("No token found in Authorization header for channel update");
+      return res.sendStatus(401);
+    }
+    
+    // Verify the token with Supabase
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
+    
+    if (userError || !userData.user) {
+      console.error('Error verifying user token for channel update:', userError);
+      return res.sendStatus(401);
+    }
+    
+    // Look up the user in our database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_uid', userData.user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user for channel update:', dbError);
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const userId = dbUser.id;
+    
+    // Verify user owns this channel
+    const { data: channel, error: channelError } = await supabase
+      .from('channels')
+      .select('*')
+      .eq('id', channelId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (channelError || !channel) {
+      console.error(`User ${userId} not authorized to update channel ${channelId}`);
+      return res.status(403).json({ error: 'Not authorized to update this channel' });
+    }
+    
+    // Update the channel
+    const { data: updatedChannel, error } = await supabase
+      .from('channels')
+      .update({ 
+        name: name || channel.name,
+        description: description || channel.description,
+        category: category || channel.category
+      })
+      .eq('id', channelId)
+      .select()
+      .single();
+    
+    if (error) {
+      console.error(`Error updating channel ${channelId}:`, error);
+      return res.status(500).json({ error: 'Failed to update channel' });
+    }
+    
+    console.log(`Channel ${channelId} updated successfully`);
+    return res.json(updatedChannel);
+  } catch (error) {
+    console.error('Error in channel update endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Error handling middleware
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const status = err.status || err.statusCode || 500;
@@ -1341,17 +1992,38 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  console.log("API request received:", req.method, req.url);
+  const requestId = Math.random().toString(36).substring(2, 15);
+  const startTime = Date.now();
   
-  // Forward to express app
-  return new Promise((resolve) => {
-    // Create a custom middleware to handle the request
-    const handleRequest = (req: any, res: any) => {
-      app(req, res, () => {
-        resolve(undefined);
-      });
-    };
+  // Enhanced debugging for Vercel serverless environment
+  console.log(`[${requestId}] 🚀 SERVERLESS FUNCTION INVOKED`);
+  console.log(`[${requestId}] Method: ${req.method}, URL: ${req.url}`);
+  console.log(`[${requestId}] Headers: ${JSON.stringify(req.headers)}`);
+  console.log(`[${requestId}] Query params: ${JSON.stringify(req.query)}`);
+  console.log(`[${requestId}] Environment: Vercel=${process.env.VERCEL === '1' ? 'true' : 'false'}, NODE_ENV=${process.env.NODE_ENV}, Region=${process.env.VERCEL_REGION || 'unknown'}`);
+  
+  if (req.body && Object.keys(req.body).length > 0) {
+    try {
+      console.log(`[${requestId}] Request body: ${JSON.stringify(req.body)}`);
+    } catch (err) {
+      console.log(`[${requestId}] Request body present but not JSON serializable`);
+    }
+  }
+  
+  try {
+    await app(req, res);
+    const duration = Date.now() - startTime;
+    console.log(`[${requestId}] ✅ Request completed in ${duration}ms with status ${res.statusCode}`);
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[${requestId}] ❌ Error handling request (${duration}ms):`, error);
     
-    handleRequest(req, res);
-  });
+    // If headers haven't been sent yet, respond with error
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: process.env.NODE_ENV === 'development' ? error.message : 'An unexpected error occurred'
+      });
+    }
+  }
 } 

@@ -580,19 +580,16 @@ export default function ProfilePage() {
                   </div>
                 ) : (
                   <>
-                    <div className="mb-4">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2">
                         <Input
-                          className="pl-9"
-                          placeholder="Search subscribed channels..."
+                          placeholder="Search channels..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
+                          className="max-w-sm"
                         />
                       </div>
-                    </div>
 
-                    <div className="overflow-y-auto max-h-[400px]">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -669,11 +666,12 @@ export default function ProfilePage() {
                         </TableBody>
                       </Table>
 
-                      {filteredAndSortedChannels.length === 0 && (
-                        <div className="text-center py-4 text-muted-foreground">
-                          No channels match your filter criteria
-                        </div>
-                      )}
+                      {filteredAndSortedChannels.length === 0 &&
+                        searchQuery && (
+                          <div className="text-center py-4 text-muted-foreground">
+                            No channels match your search criteria
+                          </div>
+                        )}
                     </div>
                   </>
                 )}

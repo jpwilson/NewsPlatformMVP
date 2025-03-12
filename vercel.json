@@ -15,6 +15,18 @@
     ],
     "routes": [
         {
+            "src": "/api/debug/(.*)",
+            "dest": "/api/index.ts"
+        },
+        {
+            "src": "/api/user/(.*)",
+            "dest": "/api/index.ts"
+        },
+        {
+            "src": "/api/channels(.*)",
+            "dest": "/api/index.ts"
+        },
+        {
             "src": "/api/(.*)",
             "dest": "/api/index.ts"
         },
