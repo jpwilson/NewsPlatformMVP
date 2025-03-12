@@ -200,15 +200,23 @@ export default function ProfilePage() {
     if (
       debugSubscriptionsData &&
       typeof debugSubscriptionsData === "object" &&
-      "subscriptions" in debugSubscriptionsData
+      "subscriptions" in debugSubscriptionsData &&
+      Array.isArray(debugSubscriptionsData.subscriptions)
     ) {
       // Map the debug subscriptions to match the expected SubscribedChannel format
+      // Filter out any invalid subscriptions or those without channel data
       return debugSubscriptionsData.subscriptions
-        .filter((sub: any) => sub.channel !== null)
+        .filter(
+          (sub: any) =>
+            sub &&
+            sub.channel !== null &&
+            typeof sub.channel === "object" &&
+            sub.channel.id
+        )
         .map((sub: any) => ({
           ...sub.channel,
           subscriberCount: 0, // We don't have this info in the debug response
-          subscriptionDate: new Date().toISOString(), // Use current date as fallback
+          subscriptionDate: sub.subscriptionDate || new Date().toISOString(), // Use provided date or current date as fallback
         })) as SubscribedChannel[];
     }
 
@@ -318,19 +326,30 @@ export default function ProfilePage() {
         console.log("Subscriptions failed to load, try debug API instead");
 
         try {
-          const response = await fetch(`/api/debug/channels?userId=${user.id}`);
+          // Use the more precise debug subscriptions endpoint instead of channels
+          const response = await fetch(
+            `/api/debug/subscriptions?userId=${user.id}`
+          );
           const data = await response.json();
-          console.log("Debug endpoint result:", data);
+          console.log("Debug subscriptions endpoint result:", data);
 
-          if (data.channels?.length) {
+          if (data.success && data.subscriptions?.length) {
             toast({
-              title: "Channels found!",
-              description: `Found ${data.channels.length} channel(s), but can't load subscriptions.`,
+              title: "Subscriptions found!",
+              description: `Found ${data.subscriptions.length} subscription(s) via debug endpoint.`,
               variant: "default",
             });
+
+            // We don't need to manually update the state since the useQuery for
+            // debugSubscriptionsData will handle this data automatically
+          } else if (data.diagnostic) {
+            console.log(
+              "Diagnostic info from debug endpoint:",
+              data.diagnostic
+            );
           }
         } catch (error) {
-          console.error("Failed to fetch debug data:", error);
+          console.error("Failed to fetch debug subscription data:", error);
         }
       }
     };

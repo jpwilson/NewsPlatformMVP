@@ -1271,10 +1271,23 @@ app.get("/api/debug/subscriptions", async (req, res) => {
       });
     }
     
+    // First, log the user to verify it exists
+    const { data: userCheck, error: userCheckError } = await supabase
+      .from('users')
+      .select('id, username')
+      .eq('id', userId)
+      .single();
+      
+    if (userCheckError) {
+      console.error(`User check failed for ID ${userId}:`, userCheckError);
+    } else {
+      console.log(`Debug subscriptions: Found user ${userCheck.username} (ID: ${userCheck.id})`);
+    }
+    
     // Get subscriptions for the specified user
     const { data: subscriptions, error: subsError } = await supabase
       .from('subscriptions')
-      .select('id, channel_id')
+      .select('id, channel_id, created_at')
       .eq('user_id', userId);
       
     if (subsError) {
@@ -1284,7 +1297,13 @@ app.get("/api/debug/subscriptions", async (req, res) => {
         message: "Error fetching subscriptions", 
         error: subsError.message,
         count: 0,
-        subscriptions: []
+        subscriptions: [],
+        diagnostic: {
+          userExists: !!userCheck,
+          errorCode: subsError.code,
+          errorMessage: subsError.message,
+          hint: subsError.hint || null
+        }
       });
     }
     
@@ -1295,13 +1314,22 @@ app.get("/api/debug/subscriptions", async (req, res) => {
         success: true,
         message: `No subscriptions found for user ID ${userId}`, 
         count: 0,
-        subscriptions: [] 
+        subscriptions: [],
+        diagnostic: {
+          userExists: !!userCheck,
+          checkedUserId: userId,
+          subscriptionsTable: "queried successfully but no results found"
+        }
       });
     }
     
+    // List the subscription IDs for debugging
+    console.log(`Found ${subscriptions.length} subscription records for user ${userId}`);
+    console.log(`Subscription IDs: ${subscriptions.map(s => s.id).join(', ')}`);
+    console.log(`Channel IDs: ${subscriptions.map(s => s.channel_id).join(', ')}`);
+    
     // Get the channel IDs
     const channelIds = subscriptions.map(sub => sub.channel_id);
-    console.log(`Found subscription channel IDs for user ${userId}:`, channelIds);
     
     // Now fetch the channel data separately
     const { data: channels, error: channelsError } = await supabase
@@ -1315,8 +1343,16 @@ app.get("/api/debug/subscriptions", async (req, res) => {
         success: false,
         message: "Error fetching channels for subscriptions", 
         error: channelsError.message,
-        count: subscriptions.length,
-        subscriptions: subscriptions 
+        subscriptionInfo: {
+          count: subscriptions.length,
+          ids: subscriptions.map(s => s.id),
+          channelIds: channelIds
+        },
+        subscriptions: subscriptions.map(sub => ({
+          id: sub.id,
+          channelId: sub.channel_id,
+          channel: null
+        }))
       });
     }
     
@@ -1975,6 +2011,399 @@ app.patch("/api/channels/:id", async (req, res) => {
     return res.json(updatedChannel);
   } catch (error) {
     console.error('Error in channel update endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Article comments endpoints
+app.post("/api/articles/:id/comments", async (req, res) => {
+  try {
+    const articleId = parseInt(req.params.id);
+    console.log(`Adding comment to article ${articleId}`);
+    
+    // Extract the Authorization header (if any)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found for adding comment");
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    
+    // Verify the token with Supabase
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
+    
+    if (userError || !userData.user) {
+      console.error('Error verifying user token for adding comment:', userError);
+      return res.status(401).json({ error: 'Invalid authentication' });
+    }
+    
+    // Look up the user in the database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_uid', userData.user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user for adding comment:', dbError);
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const userId = dbUser.id;
+    
+    // Check if article exists
+    const { data: article, error: articleError } = await supabase
+      .from('articles')
+      .select('id')
+      .eq('id', articleId)
+      .single();
+      
+    if (articleError || !article) {
+      console.error(`Article ${articleId} not found:`, articleError);
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    
+    // Create the comment
+    const { content } = req.body;
+    
+    if (!content || typeof content !== 'string' || content.trim() === '') {
+      return res.status(400).json({ error: 'Comment content is required' });
+    }
+    
+    const { data: comment, error: commentError } = await supabase
+      .from('comments')
+      .insert([{
+        article_id: articleId,
+        user_id: userId,
+        content: content.trim(),
+        created_at: new Date().toISOString()
+      }])
+      .select('*, user:user_id(id, username)')
+      .single();
+      
+    if (commentError) {
+      console.error('Error creating comment:', commentError);
+      return res.status(500).json({ error: 'Failed to create comment' });
+    }
+    
+    console.log(`Comment added to article ${articleId} by user ${userId}`);
+    return res.status(201).json(comment);
+  } catch (error) {
+    console.error('Error in add comment endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get("/api/articles/:id/comments", async (req, res) => {
+  try {
+    const articleId = parseInt(req.params.id);
+    console.log(`Fetching comments for article ${articleId}`);
+    
+    // Check if article exists
+    const { data: article, error: articleError } = await supabase
+      .from('articles')
+      .select('id')
+      .eq('id', articleId)
+      .single();
+      
+    if (articleError) {
+      if (articleError.code === 'PGRST116') {
+        console.error(`Article ${articleId} not found`);
+        return res.status(404).json({ error: 'Article not found' });
+      }
+      
+      console.error(`Error checking article ${articleId}:`, articleError);
+      return res.status(500).json({ error: 'Failed to check article' });
+    }
+    
+    // Fetch comments with user info
+    const { data: comments, error: commentsError } = await supabase
+      .from('comments')
+      .select(`
+        id,
+        content,
+        created_at,
+        user:user_id(id, username)
+      `)
+      .eq('article_id', articleId)
+      .order('created_at', { ascending: true });
+      
+    if (commentsError) {
+      console.error(`Error fetching comments for article ${articleId}:`, commentsError);
+      return res.status(500).json({ error: 'Failed to fetch comments' });
+    }
+    
+    console.log(`Found ${comments?.length || 0} comments for article ${articleId}`);
+    return res.json(comments || []);
+  } catch (error) {
+    console.error('Error in get comments endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Article view endpoint
+app.post("/api/articles/:id/view", async (req, res) => {
+  try {
+    const articleId = parseInt(req.params.id);
+    console.log(`Recording view for article ${articleId}`);
+    
+    // Get user ID if authenticated
+    let userId = null;
+    const authHeader = req.headers.authorization;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      
+      try {
+        const { data, error } = await supabaseAuth.auth.getUser(token);
+        if (!error && data.user) {
+          // Look up internal user ID if auth succeeded
+          const { data: dbUser } = await supabase
+            .from('users')
+            .select('id')
+            .eq('supabase_uid', data.user.id)
+            .single();
+            
+          if (dbUser) {
+            userId = dbUser.id;
+            console.log(`Authenticated view from user ${userId}`);
+          }
+        }
+      } catch (authError) {
+        console.error('Error checking auth for view:', authError);
+        // Continue as anonymous view if auth fails
+      }
+    }
+    
+    // Use IP address as client identifier for anonymous views
+    const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'unknown';
+    const clientIdentifier = userId ? `user-${userId}` : `ip-${clientIp}`;
+    
+    console.log(`Processing view: articleId=${articleId}, clientId=${clientIdentifier}`);
+    
+    // Try to increment view count
+    try {
+      const { data, error } = await supabase.rpc('increment_article_view', {
+        article_id: articleId,
+        client_id: clientIdentifier
+      });
+      
+      if (error) {
+        console.error('Error incrementing view with RPC:', error);
+        
+        // Fallback: Update the view count directly
+        try {
+          const { data: articleData, error: getError } = await supabase
+            .from('articles')
+            .select('view_count')
+            .eq('id', articleId)
+            .single();
+            
+          if (getError) {
+            console.error('Error fetching current view count:', getError);
+            return res.status(500).json({ error: 'Failed to get current view count' });
+          }
+          
+          // Use the current view count + 1
+          const newViewCount = (articleData.view_count || 0) + 1;
+          
+          const { data: updateData, error: updateError } = await supabase
+            .from('articles')
+            .update({ 
+              view_count: newViewCount
+            })
+            .eq('id', articleId)
+            .select('view_count')
+            .single();
+            
+          if (updateError) {
+            console.error('Fallback view count update failed:', updateError);
+            return res.status(500).json({ error: 'Failed to record view' });
+          }
+          
+          console.log(`Updated view count for article ${articleId} to ${updateData?.view_count || 'unknown'}`);
+          return res.json({ success: true, view_count: updateData?.view_count });
+        } catch (updateError) {
+          console.error('Exception in view count update:', updateError);
+          return res.status(500).json({ error: 'Exception in view count update' });
+        }
+      }
+      
+      console.log(`Successfully recorded view for article ${articleId}, result:`, data);
+      return res.json({ success: true, view_count: data });
+    } catch (rpcError) {
+      console.error('Exception calling increment_article_view RPC:', rpcError);
+      return res.status(500).json({ error: 'Exception in view recording' });
+    }
+  } catch (error) {
+    console.error('Error in article view endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Article update endpoint
+app.patch("/api/articles/:id", async (req, res) => {
+  try {
+    const articleId = parseInt(req.params.id);
+    console.log(`Updating article ${articleId}`);
+    
+    // Extract the Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found for article update");
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    
+    // Verify the token with Supabase
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
+    
+    if (userError || !userData.user) {
+      console.error('Error verifying user token for article update:', userError);
+      return res.status(401).json({ error: 'Invalid authentication' });
+    }
+    
+    // Look up the user in the database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_uid', userData.user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user for article update:', dbError);
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const userId = dbUser.id;
+    
+    // Check if article exists and belongs to this user
+    const { data: article, error: articleError } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('id', articleId)
+      .single();
+      
+    if (articleError) {
+      console.error(`Article ${articleId} not found:`, articleError);
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    
+    if (article.user_id !== userId) {
+      console.error(`User ${userId} not authorized to update article ${articleId}`);
+      return res.status(403).json({ error: 'Not authorized to update this article' });
+    }
+    
+    // Extract update fields from request
+    const { title, content, summary, published, location, category } = req.body;
+    
+    // Create update object with only fields that are provided
+    const updateObj: any = { last_edited: new Date().toISOString() };
+    
+    if (title !== undefined) updateObj.title = title;
+    if (content !== undefined) updateObj.content = content;
+    if (summary !== undefined) updateObj.summary = summary;
+    if (published !== undefined) updateObj.published = published;
+    if (location !== undefined) updateObj.location = location;
+    if (category !== undefined) updateObj.category = category;
+    
+    // Update the article
+    const { data: updatedArticle, error: updateError } = await supabase
+      .from('articles')
+      .update(updateObj)
+      .eq('id', articleId)
+      .select()
+      .single();
+      
+    if (updateError) {
+      console.error(`Error updating article ${articleId}:`, updateError);
+      return res.status(500).json({ error: 'Failed to update article' });
+    }
+    
+    console.log(`Article ${articleId} updated successfully`);
+    return res.json(updatedArticle);
+  } catch (error) {
+    console.error('Error in article update endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Toggle article publish status 
+app.post("/api/articles/:id/toggle-status", async (req, res) => {
+  try {
+    const articleId = parseInt(req.params.id);
+    console.log(`Toggling publish status for article ${articleId}`);
+    
+    // Extract the Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found for toggle status");
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    const token = authHeader.split(' ')[1];
+    
+    // Verify the token with Supabase
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
+    
+    if (userError || !userData.user) {
+      console.error('Error verifying user token for toggle status:', userError);
+      return res.status(401).json({ error: 'Invalid authentication' });
+    }
+    
+    // Look up the user in the database
+    const { data: dbUser, error: dbError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('supabase_uid', userData.user.id)
+      .single();
+    
+    if (dbError || !dbUser) {
+      console.error('Error finding user for toggle status:', dbError);
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    const userId = dbUser.id;
+    
+    // Check if article exists and belongs to this user
+    const { data: article, error: articleError } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('id', articleId)
+      .single();
+      
+    if (articleError) {
+      console.error(`Article ${articleId} not found:`, articleError);
+      return res.status(404).json({ error: 'Article not found' });
+    }
+    
+    if (article.user_id !== userId) {
+      console.error(`User ${userId} not authorized to toggle article ${articleId}`);
+      return res.status(403).json({ error: 'Not authorized to toggle this article' });
+    }
+    
+    // Toggle the published status
+    const { data: updatedArticle, error: updateError } = await supabase
+      .from('articles')
+      .update({ 
+        published: !article.published,
+        last_edited: new Date().toISOString()
+      })
+      .eq('id', articleId)
+      .select()
+      .single();
+      
+    if (updateError) {
+      console.error(`Error toggling article ${articleId}:`, updateError);
+      return res.status(500).json({ error: 'Failed to toggle article status' });
+    }
+    
+    console.log(`Article ${articleId} toggled to ${updatedArticle.published ? 'published' : 'draft'}`);
+    return res.json(updatedArticle);
+  } catch (error) {
+    console.error('Error in toggle article status endpoint:', error);
     return res.status(500).json({ error: 'Server error' });
   }
 });
