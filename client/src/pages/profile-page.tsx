@@ -30,6 +30,9 @@ import {
   Users,
   Calendar,
   RefreshCw,
+  ChevronUp,
+  ChevronDown,
+  ArrowRight,
 } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Textarea } from "@/components/ui/textarea";
@@ -131,13 +134,36 @@ export default function ProfilePage() {
 
   // Fetch user's subscribed channels
   const { data: subscribedChannels, isLoading: loadingSubscriptions } =
-    useQuery<SubscribedChannel[]>({
+    useQuery<any[]>({
       queryKey: [
         isOwnProfile
           ? "/api/user/subscriptions"
           : `/api/users/${userId}/subscriptions`,
       ],
       enabled: !!user && !!isOwnProfile, // Only fetch subscriptions for own profile when user is logged in
+      select: (data: any[]) => {
+        // Handle different data formats between local and Vercel environments
+        if (!data) return [];
+
+        console.log("Raw subscription data:", data);
+
+        // Make sure we handle the array items correctly and extract channel details
+        return data.map((sub: any) => {
+          // Handle case where the channel data might be nested or directly on the object
+          const channel = sub.channel || sub;
+
+          return {
+            id: channel.id || sub.id,
+            name: channel.name || "Unknown channel",
+            description: channel.description || "",
+            category: channel.category || "",
+            userId: channel.userId || channel.user_id,
+            subscriberCount:
+              channel.subscriberCount || sub.subscriberCount || 0,
+            subscriptionDate: sub.subscriptionDate || sub.created_at || null,
+          };
+        });
+      },
     });
 
   // Fetch all channels created by this user
@@ -214,7 +240,7 @@ export default function ProfilePage() {
     if (!subscribedChannels || !subscribedChannels.length) return [];
 
     // First filter by search query
-    const filtered = subscribedChannels.filter((channel) => {
+    const filtered = subscribedChannels.filter((channel: any) => {
       const name = channel.name || "";
       const description = channel.description || "";
 
@@ -226,7 +252,7 @@ export default function ProfilePage() {
     });
 
     // Then sort by the selected field and direction
-    return filtered.sort((a, b) => {
+    return filtered.sort((a: any, b: any) => {
       let comparison = 0;
 
       if (sortField === "name") {
@@ -371,18 +397,24 @@ export default function ProfilePage() {
                 </div>
               </div>
             ) : (
-              <div className="relative group">
-                <p className="text-base">
-                  {displayUser.description || "No description provided"}
-                </p>
+              <div className="rounded-md bg-muted p-4">
+                {displayUser.description ? (
+                  <p className="text-sm">{displayUser.description}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    {isOwnProfile
+                      ? "You haven't added a description yet."
+                      : "This user hasn't added a description yet."}
+                  </p>
+                )}
                 {isOwnProfile && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="mt-2"
                     onClick={() => setIsEditingDescription(true)}
                   >
-                    <Pencil className="h-4 w-4 mr-2" />
+                    <Pencil className="mr-2 h-4 w-4" />
                     Edit
                   </Button>
                 )}
@@ -391,9 +423,9 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="grid gap-6">
-          {/* Only show My Channels section if channels exist or just a create button */}
-          {showMyChannelsSection && (
+        <div className="space-y-8">
+          {/* My Channels section (always show when viewing own profile) */}
+          {isOwnProfile && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -401,7 +433,7 @@ export default function ProfilePage() {
                   <CardDescription>
                     Channels you have created{" "}
                     <span className="font-medium">
-                      {ownedChannels.length} out of 10
+                      {ownedChannels?.length || 0} out of 10
                     </span>{" "}
                     <span className="text-xs text-muted-foreground">
                       (max 10)
@@ -419,54 +451,60 @@ export default function ProfilePage() {
                 </Link>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Channel Name</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead className="w-[8%] text-center">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center justify-center">
-                                <Users className="h-4 w-4" />
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>Number of subscribers</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </TableHead>
-                      <TableHead></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ownedChannels.map((channel: Channel) => (
-                      <TableRow key={channel.id}>
-                        <TableCell className="font-medium">
-                          <Link href={`/channels/${channel.id}`}>
-                            {channel.name}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="truncate max-w-[200px]">
-                          {channel.description}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {(channel as any).subscriberCount || 0}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Link href={`/channels/${channel.id}/edit`}>
-                            <Button variant="ghost" size="icon">
-                              <Pencil className="h-4 w-4" />
-                              <span className="sr-only">Edit Channel</span>
-                            </Button>
-                          </Link>
-                        </TableCell>
+                {!ownedChannels?.length ? (
+                  <div className="text-center py-4 text-muted-foreground">
+                    You haven't created any channels yet
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Channel Name</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="w-[8%] text-center">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center justify-center">
+                                  <Users className="h-4 w-4" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Number of subscribers</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableHead>
+                        <TableHead></TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {ownedChannels.map((channel: any) => (
+                        <TableRow key={channel.id}>
+                          <TableCell className="font-medium">
+                            <Link href={`/channels/${channel.id}`}>
+                              {channel.name}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="truncate max-w-[200px]">
+                            {channel.description}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {channel.subscriberCount || 0}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link href={`/channels/${channel.id}/edit`}>
+                              <Button variant="ghost" size="icon">
+                                <Pencil className="h-4 w-4" />
+                                <span className="sr-only">Edit Channel</span>
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           )}
@@ -502,71 +540,98 @@ export default function ProfilePage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead
-                              className="w-[45%] cursor-pointer hover:bg-gray-50"
-                              onClick={() => handleSort("name")}
-                            >
-                              <div className="flex items-center">
+                            <TableHead>
+                              <button
+                                className="flex items-center"
+                                onClick={() => handleSort("name")}
+                              >
                                 Channel Name
                                 {sortField === "name" && (
-                                  <ArrowUpDown
-                                    className={`ml-1 h-4 w-4 ${
-                                      sortDirection === "asc"
-                                        ? "rotate-180"
-                                        : ""
-                                    }`}
-                                  />
+                                  <span className="ml-1">
+                                    {sortDirection === "asc" ? (
+                                      <ChevronUp className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4" />
+                                    )}
+                                  </span>
                                 )}
-                              </div>
+                              </button>
                             </TableHead>
-                            <TableHead className="w-[40%]">
-                              Description
+                            <TableHead>Description</TableHead>
+                            <TableHead className="text-center">
+                              <button
+                                className="flex items-center justify-center"
+                                onClick={() => handleSort("subscriberCount")}
+                              >
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="flex items-center justify-center">
+                                        <Users className="h-4 w-4" />
+                                        {sortField === "subscriberCount" && (
+                                          <span className="ml-1">
+                                            {sortDirection === "asc" ? (
+                                              <ChevronUp className="h-4 w-4" />
+                                            ) : (
+                                              <ChevronDown className="h-4 w-4" />
+                                            )}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Number of subscribers</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </button>
                             </TableHead>
-                            <TableHead
-                              className="w-[8%] cursor-pointer hover:bg-gray-50 text-center"
-                              onClick={() => handleSort("subscriberCount")}
-                            >
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center justify-center">
-                                      <Users className="h-4 w-4" />
-                                      {sortField === "subscriberCount" && (
-                                        <ArrowUpDown
-                                          className={`ml-1 h-4 w-4 ${
-                                            sortDirection === "asc"
-                                              ? "rotate-180"
-                                              : ""
-                                          }`}
-                                        />
-                                      )}
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Number of subscribers</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
+                            <TableHead>
+                              <button
+                                className="flex items-center"
+                                onClick={() => handleSort("subscriptionDate")}
+                              >
+                                Subscribed Date
+                                {sortField === "subscriptionDate" && (
+                                  <span className="ml-1">
+                                    {sortDirection === "asc" ? (
+                                      <ChevronUp className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronDown className="h-4 w-4" />
+                                    )}
+                                  </span>
+                                )}
+                              </button>
                             </TableHead>
-                            <TableHead className="w-[7%]"></TableHead>
+                            <TableHead></TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredAndSortedChannels.map((channel) => (
-                            <TableRow key={channel.id}>
+                          {filteredAndSortedChannels.map((sub: any) => (
+                            <TableRow key={`sub-${sub.id}`}>
                               <TableCell className="font-medium">
-                                {channel.name}
+                                <Link href={`/channels/${sub.id}`}>
+                                  {sub.name}
+                                </Link>
                               </TableCell>
-                              <TableCell className="truncate max-w-[200px]">
-                                {channel.description}
+                              <TableCell className="max-w-[200px] truncate">
+                                {sub.description}
                               </TableCell>
                               <TableCell className="text-center">
-                                {channel.subscriberCount || 0}
+                                {sub.subscriberCount || 0}
                               </TableCell>
-                              <TableCell className="text-right">
-                                <Link href={`/channels/${channel.id}`}>
-                                  <Button variant="outline" size="sm">
-                                    View
+                              <TableCell>
+                                {sub.subscriptionDate
+                                  ? formatDate(sub.subscriptionDate)
+                                  : "Unknown"}
+                              </TableCell>
+                              <TableCell>
+                                <Link href={`/channels/${sub.id}`}>
+                                  <Button variant="ghost" size="icon">
+                                    <ArrowRight className="h-4 w-4" />
+                                    <span className="sr-only">
+                                      View Channel
+                                    </span>
                                   </Button>
                                 </Link>
                               </TableCell>
@@ -574,13 +639,6 @@ export default function ProfilePage() {
                           ))}
                         </TableBody>
                       </Table>
-
-                      {filteredAndSortedChannels.length === 0 &&
-                        searchQuery && (
-                          <div className="text-center py-4 text-muted-foreground">
-                            No channels match your search criteria
-                          </div>
-                        )}
                     </div>
                   </>
                 )}

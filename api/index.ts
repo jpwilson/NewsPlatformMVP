@@ -988,207 +988,120 @@ app.get("/api/user/channels", async (req, res) => {
 // Add user subscriptions endpoint
 app.get("/api/user/subscriptions", async (req, res) => {
   try {
-    console.log("User subscriptions endpoint called");
-    
     // Extract the Authorization header (if any)
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log("No Authorization header found");
+      console.log("No Authorization header found for user subscriptions");
       return res.sendStatus(401);
     }
     
     const token = authHeader.split(' ')[1];
     if (!token) {
-      console.log("No token found in Authorization header");
+      console.log("No token found in Authorization header for user subscriptions");
       return res.sendStatus(401);
     }
-    
-    console.log("Verifying user token...");
     
     // Verify the token with Supabase
     const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
     
     if (userError || !userData.user) {
-      console.error('Error verifying user token:', userError);
+      console.error('Error verifying user token for user subscriptions:', userError);
       return res.sendStatus(401);
     }
     
-    const supabaseUid = userData.user.id;
-    console.log("User verified, Supabase UID:", supabaseUid);
-    
     // Look up the user in our database
-    console.log("Looking up user in database with Supabase UID:", supabaseUid);
     const { data: dbUser, error: dbError } = await supabase
       .from('users')
-      .select('*')
-      .eq('supabase_uid', supabaseUid)
+      .select('id')
+      .eq('supabase_uid', userData.user.id)
       .single();
     
-    if (dbError) {
-      console.error('Error finding user in database:', dbError);
-      if (dbError.code === 'PGRST116') {
-        console.log("No user found in the database with supabase_uid:", supabaseUid);
-      }
-      
-      // FALLBACK: Try to get user by username if supabase_uid fails
-      const username = userData.user.email?.split('@')[0] || userData.user.user_metadata?.name || userData.user.user_metadata?.full_name;
-      if (username) {
-        console.log('Trying fallback: looking up user by username:', username);
-        const { data: userByUsername, error: usernameError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('username', username)
-          .single();
-          
-        if (usernameError) {
-          console.error('Fallback search also failed:', usernameError);
-          return res.status(401).json({ error: 'User not found in database', details: dbError });
-        }
-        
-        if (userByUsername) {
-          console.log('Found user by username instead:', userByUsername);
-          
-          // Update this user's supabase_uid if it's missing
-          if (!userByUsername.supabase_uid) {
-            console.log('Updating user record with correct Supabase UID');
-            const { error: updateError } = await supabase
-              .from('users')
-              .update({ supabase_uid: supabaseUid })
-              .eq('id', userByUsername.id);
-              
-            if (updateError) {
-              console.error('Failed to update user with Supabase UID:', updateError);
-            }
-          }
-          
-          // Continue with this user for subscriptions
-          const userId = userByUsername.id;
-          console.log(`Using user ID ${userId} found by username instead`);
-          
-          return handleUserSubscriptions(userId, res);
-        }
-      }
-      
-      return res.status(401).json({ error: 'User not found in database', details: dbError });
-    }
-    
-    if (!dbUser) {
-      console.log("User not found in database");
-      return res.status(401).json({ error: 'User not found in database' });
+    if (dbError || !dbUser) {
+      console.error('Error finding user for user subscriptions:', dbError);
+      return res.status(401).json({ error: 'User not found' });
     }
     
     const userId = dbUser.id;
-    console.log("User found in database, ID:", userId);
     
-    return handleUserSubscriptions(userId, res);
-  } catch (error) {
-    console.error('Error in /api/user/subscriptions endpoint:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      details: String(error)
-    });
-  }
-});
-
-// Helper function to handle getting user subscriptions by ID
-async function handleUserSubscriptions(userId: number, res: any) {
-  try {
-    console.log(`Fetching subscriptions for user ID ${userId}...`);
-    
-    // First get just the subscription records - don't request created_at if it might not exist
+    // Get the user's subscriptions joined with channel data
     const { data: subscriptions, error: subsError } = await supabase
       .from('subscriptions')
-      .select('id, channel_id')
+      .select(`
+        id,
+        user_id,
+        channel_id,
+        created_at,
+        channels!inner (
+          id,
+          name,
+          description,
+          category,
+          user_id
+        )
+      `)
       .eq('user_id', userId);
-      
+    
     if (subsError) {
       console.error('Error fetching user subscriptions:', subsError);
-      return res.status(500).json({ error: 'Failed to fetch user subscriptions', details: subsError });
+      return res.status(500).json({ error: 'Failed to fetch subscriptions' });
     }
     
-    // If no subscriptions, return empty array
-    if (!subscriptions || subscriptions.length === 0) {
-      console.log('No subscriptions found for user');
-      return res.json([]);
-    }
-    
-    console.log(`Found ${subscriptions.length} subscriptions for user ${userId}`);
-    const channelIds = subscriptions.map(sub => sub.channel_id);
-    console.log('Subscription channel IDs:', channelIds);
-    
-    // Now fetch the channel data separately
-    const { data: channels, error: channelsError } = await supabase
-      .from('channels')
-      .select('*')
-      .in('id', channelIds);
+    // Get subscriber counts for channels
+    const countsPromises = subscriptions.map(async (sub) => {
+      const { count, error: countError } = await supabase
+        .from('subscriptions')
+        .select('*', { count: 'exact', head: true })
+        .eq('channel_id', sub.channel_id);
       
-    if (channelsError) {
-      console.error('Error fetching channels for subscriptions:', channelsError);
-      return res.status(500).json({ error: 'Failed to fetch subscription channels', details: channelsError });
-    }
-    
-    console.log(`Found ${channels?.length || 0} channels for subscriptions`);
-    
-    // If no channels found or fewer channels than subscriptions, log warning
-    if (!channels || channels.length < subscriptions.length) {
-      console.warn(`Warning: Found fewer channels (${channels?.length || 0}) than subscriptions (${subscriptions.length})`);
-    }
-    
-    // Create a map of channel id to channel data
-    const channelMap = {};
-    if (channels) {
-      channels.forEach(channel => {
-        channelMap[channel.id] = channel;
-      });
-    }
-    
-    // Enrich each channel with subscriber count
-    for (const channelId in channelMap) {
-      try {
-        const { count, error: countError } = await supabase
-          .from("subscriptions")
-          .select("*", { count: 'exact', head: true })
-          .eq("channel_id", channelId);
-          
-        if (!countError) {
-          channelMap[channelId].subscriberCount = count || 0;
-        }
-      } catch (error) {
-        console.error(`Error getting subscriber count for channel ${channelId}:`, error);
-      }
-    }
-    
-    // Format the response to match what the frontend expects
-    const formattedSubscriptions = subscriptions
-      .map(sub => {
-        const channel = channelMap[sub.channel_id];
-        if (!channel) {
-          console.warn(`Channel ${sub.channel_id} not found for subscription ${sub.id}`);
-          return null; // Skip this subscription if channel not found
-        }
-        
-        return {
-          id: sub.id,
-          channel,
-          subscriberCount: channel.subscriberCount || 0,
-          // Use current date as fallback since created_at might not exist
-          subscriptionDate: new Date().toISOString()
-        };
-      })
-      .filter(Boolean); // Remove null entries (subscriptions without channels)
-    
-    console.log(`Returning ${formattedSubscriptions.length} formatted subscriptions`);
-    
-    // Return the subscriptions, ensuring we don't return null channels
-    return res.json(formattedSubscriptions);
-  } catch (error) {
-    console.error('Error handling user subscriptions:', error);
-    return res.status(500).json({ 
-      error: 'Server error', 
-      details: String(error)
+      return {
+        channelId: sub.channel_id,
+        count: count || 0
+      };
     });
+    
+    const countsResults = await Promise.all(countsPromises);
+    const countsMap: Record<string, number> = {};
+    countsResults.forEach(result => {
+      countsMap[result.channelId] = result.count;
+    });
+    
+    // Format the data for the client
+    const result = subscriptions.map(sub => {
+      // Each channel is available at sub.channels
+      const channel = sub.channels as any;
+      
+      return {
+        id: sub.id,
+        user_id: sub.user_id,
+        channel_id: sub.channel_id,
+        created_at: sub.created_at,
+        // Include channel data directly for compatibility
+        name: channel.name,
+        description: channel.description,
+        category: channel.category,
+        userId: channel.user_id,
+        // Include nested channel object for compatibility with old code
+        channel: {
+          id: channel.id,
+          name: channel.name,
+          description: channel.description,
+          category: channel.category,
+          userId: channel.user_id,
+          created_at: sub.created_at,
+          subscriberCount: countsMap[sub.channel_id] || 0
+        },
+        subscriberCount: countsMap[sub.channel_id] || 0,
+        subscriptionDate: sub.created_at
+      };
+    });
+    
+    console.log(`Returning ${result.length} subscriptions for user ${userId}`);
+    return res.json(result);
+  } catch (error) {
+    console.error('Error in user subscriptions endpoint:', error);
+    return res.status(500).json({ error: 'Server error' });
   }
-}
+});
 
 // Remove the user-specific endpoints and add proper parameterized debug endpoints
 // 1. Debug endpoint for channels with proper query parameters

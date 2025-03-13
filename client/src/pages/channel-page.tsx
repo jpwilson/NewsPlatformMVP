@@ -144,51 +144,53 @@ export default function ChannelPage() {
     enabled: !!(channel?.user_id || channel?.userId),
   });
 
-  // Add this new code
   // Force refetch subscriptions on channel visit to ensure we have latest data
   useEffect(() => {
     if (user && channel) {
-      // Refetch subscriptions when channel page loads to ensure we have latest data
-      console.log("Forcing refetch of subscription data on channel page visit");
+      // Refetch subscriptions when channel page loads
       queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/debug/subscriptions"] });
     }
-  }, [user, channel]);
+  }, [user, channel, queryClient]);
 
   // Determine if the current user is subscribed to this channel
   const isOwner = user?.id === (channel?.user_id || channel?.userId);
 
-  // More robust checking for subscription status - compare channel IDs correctly
+  // Simplified robust checking for subscription status
   const isSubscribed = useMemo(() => {
     if (!subscriptions || !id) return false;
 
-    // Check multiple possible field names to be robust
-    return subscriptions.some((sub: any) => {
-      // Channel might be in subscriptions.id (local) or subscriptions.channel_id (Vercel)
-      const subChannelId = sub.channel_id || sub.channelId;
+    const channelId = parseInt(id);
 
-      // If channel ID is directly on the subscription, use that comparison
-      if (subChannelId !== undefined) {
-        return subChannelId === Number(id);
+    // Log data for debugging
+    console.log("Channel ID:", channelId);
+    console.log("Subscriptions:", subscriptions);
+
+    // Check if the channel ID exists in any of the user's subscriptions
+    // either as channel_id property or channel.id property
+    return subscriptions.some((sub: any) => {
+      // If sub has a channel_id property
+      if (sub.channel_id !== undefined) {
+        return parseInt(sub.channel_id) === channelId;
       }
 
-      // If the subscription itself is the channel, compare directly
-      return sub.id === Number(id);
+      // If sub has a channelId property
+      if (sub.channelId !== undefined) {
+        return parseInt(sub.channelId) === channelId;
+      }
+
+      // If sub itself is the channel or has nested channel property
+      if (sub.id !== undefined) {
+        return parseInt(sub.id) === channelId;
+      }
+
+      // If sub has a nested channel property
+      if (sub.channel && sub.channel.id !== undefined) {
+        return parseInt(sub.channel.id) === channelId;
+      }
+
+      return false;
     });
   }, [subscriptions, id]);
-
-  // Add debugging logs for subscription state
-  useEffect(() => {
-    if (subscriptions) {
-      console.log("Current subscriptions:", subscriptions);
-      console.log("Is subscribed to this channel:", isSubscribed);
-      console.log("Channel ID:", id);
-      console.log(
-        "Subscription channel IDs:",
-        subscriptions.map((s) => s.id)
-      );
-    }
-  }, [subscriptions, isSubscribed, id]);
 
   // Initialize edit form fields when channel data is loaded
   useEffect(() => {
