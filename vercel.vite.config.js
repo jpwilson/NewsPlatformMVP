@@ -17,19 +17,23 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "client", "src"),
       "@shared": path.resolve(__dirname, "shared"),
-      // Add an alias for zod to ensure it's properly bundled
-      "zod": path.resolve(__dirname, "node_modules/zod"),
+    }
+  },
+  optimizeDeps: {
+    include: ['zod'],
+    esbuildOptions: {
+      // Configure esbuild to properly handle zod
+      mainFields: ['module', 'main'],
+      resolveExtensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
     }
   },
   root: path.resolve(__dirname, "client"),
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
-    // Explicitly bundle zod with the app
-    commonjsOptions: {
-      include: [/node_modules\/zod/],
-    },
     rollupOptions: {
+      // Force zod to be included in the bundle
+      external: [], 
       input: {
         main: path.resolve(__dirname, "client/index.html"),
         authCallback: path.resolve(__dirname, "client/auth-callback.html"),

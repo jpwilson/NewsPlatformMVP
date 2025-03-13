@@ -12,7 +12,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "../zod-bundle";
+// Direct import from zod
+import * as z from "zod";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 import { NavigationBar } from "@/components/navigation-bar";

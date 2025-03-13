@@ -25,22 +25,16 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "client", "src"),
       "@shared": path.resolve(__dirname, "shared"),
-      "zod": path.resolve(__dirname, "node_modules/zod"),
     },
   },
   optimizeDeps: {
     include: ['zod'],
-    force: true,
   },
   root: path.resolve(__dirname, "client"),
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
-    commonjsOptions: {
-      include: [/node_modules\/zod/],
-    },
     rollupOptions: {
-      external: process.env.VERCEL ? [] : ['zod'],
       input: {
         main: path.resolve(__dirname, "client/index.html"),
         authCallback: path.resolve(__dirname, "client/auth-callback.html"),
