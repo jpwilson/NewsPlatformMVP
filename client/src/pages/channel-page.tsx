@@ -352,7 +352,6 @@ export default function ChannelPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/debug/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: [`/api/channels/${id}`] });
       toast({
         title: "Subscribed",
@@ -367,7 +366,6 @@ export default function ChannelPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/debug/subscriptions"] });
       queryClient.invalidateQueries({ queryKey: [`/api/channels/${id}`] });
       toast({
         title: "Unsubscribed",

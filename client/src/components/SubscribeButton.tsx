@@ -1,8 +1,8 @@
 import { Button } from "./ui/button";
 import { useState } from "react";
-import { useMutation, useQueryClient } from "react-query";
-import { apiRequest } from "@/lib/apiRequest";
-import { useToast } from "./ui/use-toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface SubscribeButtonProps {
   channelId: number;
@@ -47,8 +47,10 @@ export default function SubscribeButton({
         title: "Subscribed!",
         description: "You have successfully subscribed to this channel.",
       });
-      queryClient.invalidateQueries(["/api/user/subscriptions"]);
-      queryClient.invalidateQueries([`/api/channels/${channelId}`]);
+      queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/channels/${channelId}`],
+      });
     },
     onError: (error: Error) => {
       setIsLoading(false);
@@ -83,8 +85,10 @@ export default function SubscribeButton({
         title: "Unsubscribed",
         description: "You have successfully unsubscribed from this channel.",
       });
-      queryClient.invalidateQueries(["/api/user/subscriptions"]);
-      queryClient.invalidateQueries([`/api/channels/${channelId}`]);
+      queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
+      queryClient.invalidateQueries({
+        queryKey: [`/api/channels/${channelId}`],
+      });
     },
     onError: (error: Error) => {
       setIsLoading(false);
