@@ -23,7 +23,7 @@ import {
   MessageSquare,
   ThumbsUp,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Select,
   SelectContent,
@@ -144,9 +144,51 @@ export default function ChannelPage() {
     enabled: !!(channel?.user_id || channel?.userId),
   });
 
+  // Add this new code
+  // Force refetch subscriptions on channel visit to ensure we have latest data
+  useEffect(() => {
+    if (user && channel) {
+      // Refetch subscriptions when channel page loads to ensure we have latest data
+      console.log("Forcing refetch of subscription data on channel page visit");
+      queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/debug/subscriptions"] });
+    }
+  }, [user, channel]);
+
+  // Determine if the current user is subscribed to this channel
   const isOwner = user?.id === (channel?.user_id || channel?.userId);
-  const isSubscribed =
-    subscriptions?.some((sub: Channel) => sub.id === Number(id)) || false;
+
+  // More robust checking for subscription status - compare channel IDs correctly
+  const isSubscribed = useMemo(() => {
+    if (!subscriptions || !id) return false;
+
+    // Check multiple possible field names to be robust
+    return subscriptions.some((sub: any) => {
+      // Channel might be in subscriptions.id (local) or subscriptions.channel_id (Vercel)
+      const subChannelId = sub.channel_id || sub.channelId;
+
+      // If channel ID is directly on the subscription, use that comparison
+      if (subChannelId !== undefined) {
+        return subChannelId === Number(id);
+      }
+
+      // If the subscription itself is the channel, compare directly
+      return sub.id === Number(id);
+    });
+  }, [subscriptions, id]);
+
+  // Add debugging logs for subscription state
+  useEffect(() => {
+    if (subscriptions) {
+      console.log("Current subscriptions:", subscriptions);
+      console.log("Is subscribed to this channel:", isSubscribed);
+      console.log("Channel ID:", id);
+      console.log(
+        "Subscription channel IDs:",
+        subscriptions.map((s) => s.id)
+      );
+    }
+  }, [subscriptions, isSubscribed, id]);
 
   // Initialize edit form fields when channel data is loaded
   useEffect(() => {
@@ -482,6 +524,10 @@ export default function ChannelPage() {
                         unsubscribeMutation.isPending
                       }
                     >
+                      {subscribeMutation.isPending ||
+                      unsubscribeMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : null}
                       {isSubscribed ? "Unsubscribe" : "Subscribe"}
                     </Button>
                   )}

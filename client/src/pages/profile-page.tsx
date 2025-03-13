@@ -114,8 +114,6 @@ export default function ProfilePage() {
   const [error, setError] = useState<Error | null>(null);
   const [sortField, setSortField] = useState<SortField>("subscriptionDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const queryClient = useQueryClient();
 
   // Initialize all hooks first, even if user is not logged in
   // This ensures consistent hook usage regardless of auth state
@@ -138,11 +136,8 @@ export default function ProfilePage() {
         isOwnProfile
           ? "/api/user/subscriptions"
           : `/api/users/${userId}/subscriptions`,
-        refreshKey,
       ],
       enabled: !!user && !!isOwnProfile, // Only fetch subscriptions for own profile when user is logged in
-      retry: 3,
-      retryDelay: (attempt) => Math.min(attempt > 1 ? 2000 : 1000, 30 * 1000),
     });
 
   // Fetch all channels created by this user
@@ -156,119 +151,6 @@ export default function ProfilePage() {
       ) || [],
     enabled: !!user && !!isOwnProfile, // Only fetch owned channels for own profile when user is logged in
   });
-
-  // Add direct API query for owned channels (for debugging in Vercel)
-  const { data: debugChannelsData, isLoading: loadingDebugChannels } =
-    useQuery<DebugChannelsResponse>({
-      queryKey: ["/api/debug/channels", user?.id],
-      queryFn: async () => {
-        const response = await fetch(`/api/debug/channels?userId=${user?.id}`);
-        if (!response.ok) {
-          throw new Error(`Error fetching debug channels: ${response.status}`);
-        }
-        return response.json() as Promise<DebugChannelsResponse>;
-      },
-      enabled: isOwnProfile && !!user ? true : false,
-    });
-
-  // Add direct API query for user subscriptions (for debugging in Vercel)
-  const { data: debugSubscriptionsData, isLoading: loadingDebugSubscriptions } =
-    useQuery<DebugSubscriptionsResponse>({
-      queryKey: ["/api/debug/subscriptions", user?.id, refreshKey],
-      queryFn: async () => {
-        const response = await fetch(
-          `/api/debug/subscriptions?userId=${user?.id}`
-        );
-        if (!response.ok) {
-          throw new Error(
-            `Error fetching debug subscriptions: ${response.status}`
-          );
-        }
-        return response.json() as Promise<DebugSubscriptionsResponse>;
-      },
-      enabled: isOwnProfile && !!user ? true : false,
-      retry: 3,
-      retryDelay: (attempt) => Math.min(attempt > 1 ? 2000 : 1000, 30 * 1000),
-    });
-
-  // Combine owned channels from both sources
-  const combinedOwnedChannels = useMemo(() => {
-    if (ownedChannels?.length) {
-      return ownedChannels;
-    }
-    if (debugChannelsData && "channels" in debugChannelsData) {
-      return debugChannelsData.channels || [];
-    }
-    return [];
-  }, [ownedChannels, debugChannelsData]);
-
-  // Combine subscriptions from both sources
-  const combinedSubscribedChannels = useMemo(() => {
-    console.log("Computing combinedSubscribedChannels");
-    console.log("subscribedChannels:", subscribedChannels);
-    console.log("debugSubscriptionsData:", debugSubscriptionsData);
-
-    if (subscribedChannels?.length) {
-      console.log(
-        "Using primary subscribedChannels data with length:",
-        subscribedChannels.length
-      );
-      return subscribedChannels;
-    }
-
-    // Add a type check for debugSubscriptionsData
-    if (
-      debugSubscriptionsData &&
-      typeof debugSubscriptionsData === "object" &&
-      "subscriptions" in debugSubscriptionsData &&
-      Array.isArray(debugSubscriptionsData.subscriptions)
-    ) {
-      console.log(
-        "Using debug subscriptions data with length:",
-        debugSubscriptionsData.subscriptions.length
-      );
-
-      // Map the debug subscriptions to match the expected SubscribedChannel format
-      // Filter out any invalid subscriptions or those without channel data
-      const mappedChannels = debugSubscriptionsData.subscriptions
-        .filter((sub: any) => {
-          const isValid =
-            sub &&
-            sub.channel !== null &&
-            typeof sub.channel === "object" &&
-            sub.channel.id;
-
-          if (!isValid) {
-            console.log("Filtering out invalid subscription:", sub);
-          }
-          return isValid;
-        })
-        .map((sub: any) => {
-          console.log("Processing subscription:", sub);
-
-          // Start with the channel data
-          const result = {
-            ...sub.channel,
-
-            // Add subscriber count from either source
-            subscriberCount:
-              sub.subscriberCount || sub.channel.subscriberCount || 0,
-
-            // Add subscription date
-            subscriptionDate: sub.subscriptionDate || new Date().toISOString(),
-          };
-
-          console.log("Mapped to SubscribedChannel:", result);
-          return result;
-        }) as SubscribedChannel[];
-
-      console.log("Final mapped subscribed channels:", mappedChannels);
-      return mappedChannels;
-    }
-
-    console.log("No subscription data available, returning empty array");
-    return [];
-  }, [subscribedChannels, debugSubscriptionsData]);
 
   // Initialize description state from user data when available
   useEffect(() => {
@@ -327,16 +209,19 @@ export default function ProfilePage() {
     }
   };
 
-  // Update the filteredAndSortedChannels reference to use the combined data
+  // Update the filteredAndSortedChannels reference
   const filteredAndSortedChannels = useMemo(() => {
-    if (!combinedSubscribedChannels.length) return [];
+    if (!subscribedChannels || !subscribedChannels.length) return [];
 
     // First filter by search query
-    const filtered = combinedSubscribedChannels.filter((channel) => {
+    const filtered = subscribedChannels.filter((channel) => {
+      const name = channel.name || "";
+      const description = channel.description || "";
+
       return (
         !searchQuery ||
-        channel.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        channel.description.toLowerCase().includes(searchQuery.toLowerCase())
+        name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        description.toLowerCase().includes(searchQuery.toLowerCase())
       );
     });
 
@@ -345,7 +230,9 @@ export default function ProfilePage() {
       let comparison = 0;
 
       if (sortField === "name") {
-        comparison = a.name.localeCompare(b.name);
+        const nameA = a.name || "";
+        const nameB = b.name || "";
+        comparison = nameA.localeCompare(nameB);
       } else if (sortField === "subscriberCount") {
         const countA = a.subscriberCount || 0;
         const countB = b.subscriberCount || 0;
@@ -362,69 +249,7 @@ export default function ProfilePage() {
 
       return sortDirection === "asc" ? comparison : -comparison;
     });
-  }, [combinedSubscribedChannels, searchQuery, sortField, sortDirection]);
-
-  // Add debug endpoint fallback for subscriptions
-  useEffect(() => {
-    const checkSubscriptionsAndChannels = async () => {
-      if (!user || !isOwnProfile) return;
-
-      if (!subscribedChannels && !loadingSubscriptions) {
-        console.log("Subscriptions failed to load, try debug API instead");
-
-        try {
-          // Use the more precise debug subscriptions endpoint instead of channels
-          const response = await fetch(
-            `/api/debug/subscriptions?userId=${user.id}`
-          );
-          const data = await response.json();
-          console.log("Debug subscriptions endpoint result:", data);
-
-          if (data.success && data.subscriptions?.length) {
-            toast({
-              title: "Subscriptions found!",
-              description: `Found ${data.subscriptions.length} subscription(s) via debug endpoint.`,
-              variant: "default",
-            });
-
-            // Invalidate queries to force a refresh
-            queryClient.invalidateQueries({
-              queryKey: ["/api/debug/subscriptions"],
-            });
-            setRefreshKey((prev) => prev + 1);
-          } else if (data.diagnostic) {
-            console.log(
-              "Diagnostic info from debug endpoint:",
-              data.diagnostic
-            );
-          }
-        } catch (error) {
-          console.error("Failed to fetch debug subscription data:", error);
-        }
-      }
-    };
-
-    checkSubscriptionsAndChannels();
-  }, [
-    user,
-    isOwnProfile,
-    subscribedChannels,
-    loadingSubscriptions,
-    toast,
-    queryClient,
-  ]);
-
-  // Add button to manually refresh subscriptions
-  const handleRefreshSubscriptions = useCallback(() => {
-    setRefreshKey((prev) => prev + 1);
-    queryClient.invalidateQueries({ queryKey: ["/api/user/subscriptions"] });
-    queryClient.invalidateQueries({ queryKey: ["/api/debug/subscriptions"] });
-    toast({
-      title: "Refreshing subscriptions",
-      description: "Attempting to fetch the latest subscription data.",
-      variant: "default",
-    });
-  }, [queryClient, toast]);
+  }, [subscribedChannels, searchQuery, sortField, sortDirection]);
 
   // Now the redirect - after all hooks are defined
   if (!user) {
@@ -434,10 +259,7 @@ export default function ProfilePage() {
   // Check for loading state
   const isLoading =
     loadingProfile ||
-    (isOwnProfile &&
-      (loadingSubscriptions ||
-        loadingOwnedChannels ||
-        loadingDebugSubscriptions));
+    (isOwnProfile && (loadingSubscriptions || loadingOwnedChannels));
 
   if (isLoading) {
     return (
@@ -489,7 +311,7 @@ export default function ProfilePage() {
 
   // Check if we need to show the "My Channels" section
   const showMyChannelsSection =
-    isOwnProfile && combinedOwnedChannels.length > 0;
+    isOwnProfile && ownedChannels && ownedChannels.length > 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -579,7 +401,7 @@ export default function ProfilePage() {
                   <CardDescription>
                     Channels you have created{" "}
                     <span className="font-medium">
-                      {combinedOwnedChannels.length} out of 10
+                      {ownedChannels.length} out of 10
                     </span>{" "}
                     <span className="text-xs text-muted-foreground">
                       (max 10)
@@ -589,8 +411,7 @@ export default function ProfilePage() {
                 <Link href="/channels/new">
                   <Button
                     disabled={Boolean(
-                      combinedOwnedChannels &&
-                        combinedOwnedChannels.length >= 10
+                      ownedChannels && ownedChannels.length >= 10
                     )}
                   >
                     Create Another Channel
@@ -621,7 +442,7 @@ export default function ProfilePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {combinedOwnedChannels.map((channel: Channel) => (
+                    {ownedChannels.map((channel: Channel) => (
                       <TableRow key={channel.id}>
                         <TableCell className="font-medium">
                           <Link href={`/channels/${channel.id}`}>
@@ -654,32 +475,15 @@ export default function ProfilePage() {
           {isOwnProfile && (
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-center">
-                  <CardTitle>Channel Subscriptions</CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRefreshSubscriptions}
-                    disabled={loadingSubscriptions || loadingDebugSubscriptions}
-                  >
-                    <RefreshCw
-                      className={cn(
-                        "h-4 w-4 mr-2",
-                        (loadingSubscriptions || loadingDebugSubscriptions) &&
-                          "animate-spin"
-                      )}
-                    />
-                    Refresh
-                  </Button>
-                </div>
+                <CardTitle>Channel Subscriptions</CardTitle>
                 <CardDescription>
                   You are currently subscribed to{" "}
-                  {combinedSubscribedChannels?.length || 0} channel
-                  {combinedSubscribedChannels?.length !== 1 ? "s" : ""}
+                  {subscribedChannels?.length || 0} channel
+                  {subscribedChannels?.length !== 1 ? "s" : ""}
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {!combinedSubscribedChannels?.length ? (
+                {!subscribedChannels?.length ? (
                   <div className="text-center py-4 text-muted-foreground">
                     Not yet subscribed to any channels
                   </div>

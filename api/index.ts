@@ -1095,10 +1095,10 @@ async function handleUserSubscriptions(userId: number, res: any) {
   try {
     console.log(`Fetching subscriptions for user ID ${userId}...`);
     
-    // First get just the subscription records
+    // First get just the subscription records - don't request created_at if it might not exist
     const { data: subscriptions, error: subsError } = await supabase
       .from('subscriptions')
-      .select('id, channel_id, created_at')
+      .select('id, channel_id')
       .eq('user_id', userId);
       
     if (subsError) {
@@ -1171,7 +1171,8 @@ async function handleUserSubscriptions(userId: number, res: any) {
           id: sub.id,
           channel,
           subscriberCount: channel.subscriberCount || 0,
-          subscriptionDate: sub.created_at || new Date().toISOString()
+          // Use current date as fallback since created_at might not exist
+          subscriptionDate: new Date().toISOString()
         };
       })
       .filter(Boolean); // Remove null entries (subscriptions without channels)
@@ -1270,6 +1271,22 @@ app.get("/api/debug/subscriptions", async (req, res) => {
         subscriptions: []
       });
     }
+
+    // First check if we can get the subscriptions table metadata
+    try {
+      const { data: metadata, error: metadataError } = await supabase
+        .from('subscriptions')
+        .select()
+        .limit(1);
+        
+      if (metadataError) {
+        console.error('Error checking subscriptions table metadata:', metadataError);
+      } else {
+        console.log('Subscriptions table structure sample:', metadata);
+      }
+    } catch (metadataError) {
+      console.error('Failed to check subscriptions table metadata:', metadataError);
+    }
     
     // First, log the user to verify it exists
     const { data: userCheck, error: userCheckError } = await supabase
@@ -1284,10 +1301,10 @@ app.get("/api/debug/subscriptions", async (req, res) => {
       console.log(`Debug subscriptions: Found user ${userCheck.username} (ID: ${userCheck.id})`);
     }
     
-    // Get subscriptions for the specified user
+    // Get subscriptions for the specified user - don't request created_at if it might not exist
     const { data: subscriptions, error: subsError } = await supabase
       .from('subscriptions')
-      .select('id, channel_id, created_at, user_id')  // Also select user_id for verification
+      .select('id, channel_id, user_id')
       .eq('user_id', userId);
       
     if (subsError) {
@@ -1359,7 +1376,8 @@ app.get("/api/debug/subscriptions", async (req, res) => {
           id: sub.id,
           channelId: sub.channel_id,
           channel: null,
-          subscriptionDate: sub.created_at || null
+          // Use current timestamp since created_at might not exist
+          subscriptionDate: new Date().toISOString()
         }))
       });
     }
@@ -1388,14 +1406,15 @@ app.get("/api/debug/subscriptions", async (req, res) => {
       }
     }
     
-    // Format the response to match what the frontend expects
+    // Format the response to match what the frontend expects - don't rely on created_at
     const formattedSubscriptions = subscriptions.map(sub => {
       const channel = channelMap[sub.channel_id] || null;
       return {
         id: sub.id,
         channel: channel,
         channelId: sub.channel_id,
-        subscriptionDate: sub.created_at || new Date().toISOString(),
+        // Use current timestamp since created_at might not exist
+        subscriptionDate: new Date().toISOString(),
         subscriberCount: channel?.subscriberCount || 0
       };
     });
@@ -1769,24 +1788,22 @@ app.post("/api/channels/:id/subscribe", async (req, res) => {
     const userId = dbUser.id;
     const channelId = parseInt(req.params.id);
     
-    // Check if already subscribed
-    const { data: existingSub, error: subCheckError } = await supabase
+    // First delete any existing subscriptions to prevent duplicates
+    const { data: existingSubs, error: deleteError } = await supabase
       .from('subscriptions')
-      .select('*')
+      .delete()
       .eq('user_id', userId)
       .eq('channel_id', channelId)
-      .maybeSingle();
-    
-    if (subCheckError) {
-      console.error('Error checking existing subscription:', subCheckError);
+      .select();
+      
+    if (deleteError) {
+      console.error('Error cleaning up existing subscriptions:', deleteError);
+      // Continue despite error - we'll try to create a new subscription anyway
+    } else if (existingSubs && existingSubs.length > 0) {
+      console.log(`Removed ${existingSubs.length} existing subscription(s) for user ${userId} and channel ${channelId}`);
     }
     
-    if (existingSub) {
-      console.log(`User ${userId} already subscribed to channel ${channelId}`);
-      return res.json({ message: 'Already subscribed' });
-    }
-    
-    // Create the subscription
+    // Create a new subscription now that any duplicates are removed
     const { data, error: createError } = await supabase
       .from('subscriptions')
       .insert([{ user_id: userId, channel_id: channelId }])
@@ -1844,20 +1861,25 @@ app.delete("/api/channels/:id/subscribe", async (req, res) => {
     const userId = dbUser.id;
     const channelId = parseInt(req.params.id);
     
-    // Delete the subscription
-    const { error: deleteError } = await supabase
+    // Delete ALL subscriptions for this user and channel
+    const { data: deletedItems, error: deleteError } = await supabase
       .from('subscriptions')
       .delete()
       .eq('user_id', userId)
-      .eq('channel_id', channelId);
+      .eq('channel_id', channelId)
+      .select();
     
     if (deleteError) {
       console.error('Error deleting subscription:', deleteError);
       return res.status(500).json({ error: 'Failed to unsubscribe' });
     }
     
-    console.log(`User ${userId} unsubscribed from channel ${channelId}`);
-    return res.json({ message: 'Unsubscribed successfully' });
+    console.log(`User ${userId} unsubscribed from channel ${channelId}, removed ${deletedItems?.length || 0} subscriptions`);
+    
+    return res.json({ 
+      message: 'Unsubscribed successfully',
+      removed: deletedItems?.length || 0
+    });
   } catch (error) {
     console.error('Error in unsubscribe endpoint:', error);
     return res.status(500).json({ error: 'Server error' });
@@ -2485,3 +2507,83 @@ export default async function handler(
     }
   }
 } 
+
+// Add a raw subscription data endpoint for direct debugging
+app.get("/api/raw-subscriptions", async (req, res) => {
+  try {
+    const userId = req.query.userId ? parseInt(req.query.userId as string) : null;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required"
+      });
+    }
+    
+    console.log(`Raw subscriptions endpoint called for user ID ${userId}`);
+    
+    // Get the user's auth from the header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log("No Authorization header found");
+      return res.status(401).json({ error: "No authorization header" });
+    }
+    
+    // Verify the token
+    const token = authHeader.split(' ')[1];
+    const { data: userData, error: userError } = await supabaseAuth.auth.getUser(token);
+    if (userError || !userData.user) {
+      console.error('Error verifying user token:', userError);
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    
+    // Direct query to get raw subscription data for this user
+    const { data: rawSubscriptions, error: subsError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId);
+      
+    if (subsError) {
+      console.error('Error fetching raw subscriptions:', subsError);
+      return res.status(500).json({ 
+        error: 'Failed to fetch subscriptions', 
+        details: subsError 
+      });
+    }
+    
+    console.log(`Found ${rawSubscriptions?.length || 0} raw subscriptions:`, rawSubscriptions);
+    
+    // If there are subscriptions, get the channel details
+    let channelDetails: any[] = [];
+    if (rawSubscriptions && rawSubscriptions.length > 0) {
+      const channelIds = rawSubscriptions.map(sub => sub.channel_id);
+      
+      const { data: channels, error: channelsError } = await supabase
+        .from('channels')
+        .select('*')
+        .in('id', channelIds);
+        
+      if (channelsError) {
+        console.error('Error fetching channel details:', channelsError);
+      } else {
+        channelDetails = channels || [];
+        console.log(`Found ${channelDetails.length} channel details`);
+      }
+    }
+    
+    return res.json({
+      success: true,
+      rawSubscriptions: rawSubscriptions || [],
+      channelDetails,
+      message: `Found ${rawSubscriptions?.length || 0} raw subscriptions`
+    });
+    
+  } catch (error) {
+    console.error('Error in raw subscriptions endpoint:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Server error', 
+      details: String(error)
+    });
+  }
+}); 
