@@ -12,8 +12,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-// Direct import from zod
-import * as z from "zod";
+// Use our local fallback module
+import * as z from "../zod-fallback";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 import { NavigationBar } from "@/components/navigation-bar";
