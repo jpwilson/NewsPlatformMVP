@@ -1287,7 +1287,7 @@ app.get("/api/debug/subscriptions", async (req, res) => {
     // Get subscriptions for the specified user
     const { data: subscriptions, error: subsError } = await supabase
       .from('subscriptions')
-      .select('id, channel_id, created_at')
+      .select('id, channel_id, created_at, user_id')  // Also select user_id for verification
       .eq('user_id', userId);
       
     if (subsError) {
@@ -1310,6 +1310,12 @@ app.get("/api/debug/subscriptions", async (req, res) => {
     // If no subscriptions, return empty array
     if (!subscriptions || subscriptions.length === 0) {
       console.log(`No subscriptions found for user ID ${userId}`);
+      
+      // Additional diagnostic query to check if there are any subscriptions at all
+      const { count: totalSubsCount, error: totalSubsError } = await supabase
+        .from('subscriptions')
+        .select('*', { count: 'exact', head: true });
+        
       return res.json({ 
         success: true,
         message: `No subscriptions found for user ID ${userId}`, 
@@ -1318,7 +1324,8 @@ app.get("/api/debug/subscriptions", async (req, res) => {
         diagnostic: {
           userExists: !!userCheck,
           checkedUserId: userId,
-          subscriptionsTable: "queried successfully but no results found"
+          subscriptionsTable: "queried successfully but no results found",
+          totalSubscriptionsInSystem: totalSubsError ? "error counting" : totalSubsCount
         }
       });
     }
@@ -1351,7 +1358,8 @@ app.get("/api/debug/subscriptions", async (req, res) => {
         subscriptions: subscriptions.map(sub => ({
           id: sub.id,
           channelId: sub.channel_id,
-          channel: null
+          channel: null,
+          subscriptionDate: sub.created_at || null
         }))
       });
     }
@@ -1364,12 +1372,33 @@ app.get("/api/debug/subscriptions", async (req, res) => {
       });
     }
     
+    // Enrich channels with subscriber counts
+    for (const channelId in channelMap) {
+      try {
+        const { count, error: countError } = await supabase
+          .from("subscriptions")
+          .select("*", { count: 'exact', head: true })
+          .eq("channel_id", channelId);
+          
+        if (!countError) {
+          channelMap[channelId].subscriberCount = count || 0;
+        }
+      } catch (error) {
+        console.error(`Error getting subscriber count for channel ${channelId}:`, error);
+      }
+    }
+    
     // Format the response to match what the frontend expects
-    const formattedSubscriptions = subscriptions.map(sub => ({
-      id: sub.id,
-      channel: channelMap[sub.channel_id] || null,
-      channelId: sub.channel_id
-    }));
+    const formattedSubscriptions = subscriptions.map(sub => {
+      const channel = channelMap[sub.channel_id] || null;
+      return {
+        id: sub.id,
+        channel: channel,
+        channelId: sub.channel_id,
+        subscriptionDate: sub.created_at || new Date().toISOString(),
+        subscriberCount: channel?.subscriberCount || 0
+      };
+    });
     
     console.log(`Debug endpoint: Found ${formattedSubscriptions.length} subscriptions for user ID ${userId}`);
     
