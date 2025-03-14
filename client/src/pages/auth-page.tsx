@@ -11,9 +11,6 @@ import {
 } from "@/components/ui/form";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-// Use our local fallback module
-import * as z from "../zod-fallback";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 import { NavigationBar } from "@/components/navigation-bar";
@@ -22,21 +19,22 @@ import { useLocation } from "wouter";
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
 import "../lib/oauth-debug"; // Add debug utilities
+import {
+  validateUsername,
+  validatePassword,
+  createValidator,
+} from "../simple-validator";
 
-// Schema for login
-const loginSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
+// Define form types
+type LoginFormValues = {
+  username: string;
+  password: string;
+};
 
-// Schema for registration
-const registerSchema = z.object({
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
-
-type LoginFormValues = z.infer<typeof loginSchema>;
-type RegisterFormValues = z.infer<typeof registerSchema>;
+type RegisterFormValues = {
+  username: string;
+  password: string;
+};
 
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
@@ -47,20 +45,31 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
+  // Create validators
+  const loginValidator = createValidator({
+    username: validateUsername,
+    password: validatePassword,
+  });
+
+  const registerValidator = createValidator({
+    username: validateUsername,
+    password: validatePassword,
+  });
+
   const loginForm = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
     defaultValues: {
       username: "",
       password: "",
     },
+    mode: "onSubmit",
   });
 
   const registerForm = useForm<RegisterFormValues>({
-    resolver: zodResolver(registerSchema),
     defaultValues: {
       username: "",
       password: "",
     },
+    mode: "onSubmit",
   });
 
   // If user is already logged in, redirect to home
@@ -75,6 +84,18 @@ export default function AuthPage() {
 
     if (!username || !password) {
       setError("Please fill in all fields");
+      return;
+    }
+
+    // Validate form
+    const formValues = { username, password };
+    const validator = isLogin ? loginValidator : registerValidator;
+    const validationResult = validator(formValues);
+
+    if (Object.keys(validationResult.errors).length > 0) {
+      // Show first error
+      const firstError = Object.values(validationResult.errors)[0];
+      setError(firstError.message);
       return;
     }
 
@@ -190,7 +211,10 @@ export default function AuthPage() {
                 </div>
               </div>
 
-              <Tabs defaultValue="login">
+              <Tabs
+                defaultValue="login"
+                onValueChange={(value) => setIsLogin(value === "login")}
+              >
                 <TabsList className="grid w-full grid-cols-2 mb-4">
                   <TabsTrigger value="login">Login</TabsTrigger>
                   <TabsTrigger value="register">Register</TabsTrigger>
